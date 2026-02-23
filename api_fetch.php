@@ -23,22 +23,42 @@ class ApiFetch {
         $count    = 0;
         $keywords = $this->db->getKeywords();
 
-        for ($page = 1; $page <= MAX_PAGES_PER_SOURCE; $page++) {
+        // 증분: DB에 한 번이라도 있으면 최근 N일만 조회(구간이 비어 0건 나오는 것 방지). 없으면 전체 기간
+        $lastFetched = $this->db->getLastFetchedAt('나라장터');
+        if ($lastFetched) {
+            $bgnDt   = date('YmdHi', strtotime('-' . G2B_INCREMENTAL_DAYS . ' day'));
+            $endDt   = date('YmdHi');
+            $maxPage = G2B_INCREMENTAL_MAX_PAGES;
+        } else {
+            $bgnDt   = date('YmdHi', strtotime('-' . G2B_DAYS . ' day'));
+            $endDt   = date('YmdHi');
+            $maxPage = MAX_PAGES_PER_SOURCE;
+        }
+
+        for ($page = 1; $page <= $maxPage; $page++) {
             $params = http_build_query([
                 'serviceKey'     => G2B_API_KEY,
                 'numOfRows'      => 100,
                 'pageNo'         => $page,
                 'type'           => 'json',
                 'inqryDiv'       => 1,
-                'inqryBgnDt'     => date('YmdHi', strtotime('-7 day')),
-                'inqryEndDt'     => date('YmdHi'),
+                'inqryBgnDt'     => $bgnDt,
+                'inqryEndDt'     => $endDt,
             ]);
 
             $response = @file_get_contents(G2B_API_URL . '?' . $params);
-            if (!$response) break;
+            if ($response === false) {
+                if ($page === 1) trigger_error('나라장터 API 연결 실패: ' . G2B_API_URL, E_USER_WARNING);
+                break;
+            }
 
             $data  = json_decode($response, true);
             $body  = $data['response']['body'] ?? [];
+            $resultCode = $data['response']['header']['resultCode'] ?? $body['resultCode'] ?? '';
+            if ($resultCode && $resultCode !== '00' && $resultCode !== '0') {
+                if ($page === 1) trigger_error('나라장터 API 오류: ' . ($data['response']['header']['resultMsg'] ?? $body['resultMsg'] ?? $resultCode), E_USER_WARNING);
+                break;
+            }
             $items = $body['items']['item'] ?? $body['items'] ?? [];
             if (empty($items)) break;
 
@@ -78,11 +98,12 @@ class ApiFetch {
         $count    = 0;
         $keywords = $this->db->getKeywords();
 
-        for ($page = 1; $page <= MAX_PAGES_PER_SOURCE; $page++) {
+        // 증분: 최신 순이므로 앞쪽 페이지만 조회 (새 공고만 빠르게 반영)
+        for ($page = 1; $page <= KSTARTUP_INCREMENTAL_PAGES; $page++) {
             $params = http_build_query([
                 'serviceKey' => KSTARTUP_API_KEY,
-                'pageNo'     => $page,
-                'numOfRows'  => 100,
+                'page'       => $page,
+                'perPage'    => 100,
             ]);
 
             $response = @file_get_contents(KSTARTUP_API_URL . '?' . $params);

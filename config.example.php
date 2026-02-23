@@ -23,7 +23,9 @@ define('KSTARTUP_API_URL', 'https://apis.data.go.kr/B552735/kisedKstartupService
 
 // ── 수집 설정 ──
 define('FETCH_INTERVAL_HOURS', 24);   // 수집 주기 (시간)
-define('MAX_PAGES_PER_SOURCE', 5);    // 소스별 최대 페이지 수
+define('G2B_DAYS', 90);               // 나라장터 조회 기간 (일)
+define('MAX_PAGES_PER_SOURCE', 50);   // 나라장터 최대 페이지 수
+define('KSTARTUP_MAX_PAGES', 150);    // K-스타트업 최대 페이지
 
 // ── 타임존 ──
 date_default_timezone_set('Asia/Seoul');

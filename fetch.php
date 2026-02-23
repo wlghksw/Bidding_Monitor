@@ -4,6 +4,8 @@
 // cron 설정: 0 9 * * * php /var/www/html/bid_monitor/fetch.php
 // =============================================
 
+set_time_limit(600); // 수집 시간 10분까지 허용 (50+150 페이지 API 호출)
+
 require_once 'config.php';
 require_once 'db.php';
 require_once 'api_fetch.php';

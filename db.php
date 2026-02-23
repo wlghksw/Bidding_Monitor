@@ -42,8 +42,17 @@ class Database {
             $params[':days'] = (int)$deadline;
         }
         if ($tagId) {
-            $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tag_id)';
-            $params[':tag_id'] = $tagId;
+            $tagKeyword = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
+            $tagKeyword->execute([$tagId]);
+            $tagText = $tagKeyword->fetchColumn();
+            if ($tagText !== false && $tagText !== '') {
+                $where[] = '(EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tag_id) OR (b.title LIKE :tag_like OR b.org_name LIKE :tag_like))';
+                $params[':tag_id']   = $tagId;
+                $params[':tag_like'] = '%' . $tagText . '%';
+            } else {
+                $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tag_id)';
+                $params[':tag_id'] = $tagId;
+            }
         }
         if ($from) {
             $where[] = '(b.deadline_date >= :date_from OR b.notice_date >= :date_from)';
@@ -57,7 +66,7 @@ class Database {
         $orderBy = match($sort) {
             'deadline' => 'b.deadline_date ASC',
             'amount'   => 'b.budget_raw DESC',
-            default    => 'b.fetched_at DESC',
+            default    => 'COALESCE(b.notice_date, b.deadline_date) DESC, b.fetched_at DESC', // 최신순 = 공고일/마감일 기준
         };
 
         $whereStr = implode(' AND ', $where);
@@ -97,7 +106,19 @@ class Database {
 
         if ($search) { $where[] = '(b.title LIKE :s OR b.org_name LIKE :s)'; $params[':s'] = "%{$search}%"; }
         if ($deadline) { $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL :d DAY)'; $params[':d'] = (int)$deadline; }
-        if ($tagId) { $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tid)'; $params[':tid'] = $tagId; }
+        if ($tagId) {
+            $tagKw = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
+            $tagKw->execute([$tagId]);
+            $tagText = $tagKw->fetchColumn();
+            if ($tagText !== false && $tagText !== '') {
+                $where[] = '(EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tid) OR (b.title LIKE :tlike OR b.org_name LIKE :tlike))';
+                $params[':tid'] = $tagId;
+                $params[':tlike'] = '%' . $tagText . '%';
+            } else {
+                $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tid)';
+                $params[':tid'] = $tagId;
+            }
+        }
 
         $whereStr = implode(' AND ', $where);
         $sql = "SELECT b.source, COUNT(*) AS cnt FROM bids b WHERE {$whereStr} GROUP BY b.source";
@@ -130,6 +151,14 @@ class Database {
             'new_today'     => $this->pdo->query("SELECT COUNT(*) FROM bids WHERE DATE(created_at) = CURDATE()")->fetchColumn(),
             'last_fetch'    => $this->pdo->query("SELECT MAX(fetched_at) FROM bids")->fetchColumn() ?? '-',
         ];
+    }
+
+    /** 소스별 마지막 수집 시점 (증분 수집용). 없으면 null */
+    public function getLastFetchedAt(string $source): ?string {
+        $stmt = $this->pdo->prepare("SELECT MAX(fetched_at) FROM bids WHERE source = ?");
+        $stmt->execute([$source]);
+        $v = $stmt->fetchColumn();
+        return $v ? (string) $v : null;
     }
 
     // ── 키워드 목록 ──
@@ -185,7 +214,20 @@ class Database {
         if ($search) { $where[] = '(b.title LIKE ? OR b.org_name LIKE ?)'; $params[] = "%{$search}%"; $params[] = "%{$search}%"; }
         if ($source) { $where[] = 'b.source = ?'; $params[] = $source; }
         if ($deadline) { $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)'; $params[] = (int)$deadline; }
-        if ($tagId) { $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = ?)'; $params[] = $tagId; }
+        if ($tagId) {
+            $tagKw = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
+            $tagKw->execute([$tagId]);
+            $tagText = $tagKw->fetchColumn();
+            if ($tagText !== false && $tagText !== '') {
+                $where[] = '(EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = ?) OR (b.title LIKE ? OR b.org_name LIKE ?))';
+                $params[] = $tagId;
+                $params[] = '%' . $tagText . '%';
+                $params[] = '%' . $tagText . '%';
+            } else {
+                $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = ?)';
+                $params[] = $tagId;
+            }
+        }
 
         $sql = "SELECT b.title, b.url, b.source, b.org_name, b.budget, b.deadline_date,
                        b.fetched_at, GROUP_CONCAT(k.keyword) AS matched_keywords
