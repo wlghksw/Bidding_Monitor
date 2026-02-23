@@ -21,14 +21,6 @@ define('G2B_API_URL', 'https://apis.data.go.kr/1230000/BidPublicInfoService04/ge
 define('KSTARTUP_API_KEY', 'YOUR_KSTARTUP_API_KEY');
 define('KSTARTUP_API_URL', 'https://apis.data.go.kr/B552735/kisedKstartupService/getAnnouncList');
 
-// ── 중소기업기술정보진흥원 (SMTECH) OpenAPI ──
-// 발급: https://www.data.go.kr → "중소기업기술개발지원사업공고" 검색
-define('SMTECH_API_KEY', 'YOUR_SMTECH_API_KEY');
-define('SMTECH_API_URL', 'https://apis.data.go.kr/B090041/openapi/service/SbizAnnouncService/getAnnouncList');
-
-// ── IITP (크롤링) ──
-define('IITP_URL', 'https://www.iitp.kr/kr/1/business/businessOpportunity/list.it');
-
 // ── 수집 설정 ──
 define('FETCH_INTERVAL_HOURS', 24);   // 수집 주기 (시간)
 define('MAX_PAGES_PER_SOURCE', 5);    // 소스별 최대 페이지 수

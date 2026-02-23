@@ -78,8 +78,6 @@ function exportExcel(Database $db, array $selectedIds, array $filters): void {
     $sourceColors = [
         '나라장터'           => 'DBEAFE',
         'K-스타트업'         => 'DCFCE7',
-        '중소기업기술정보진흥원' => 'FEF9C3',
-        'IITP'              => 'FFE4E6',
     ];
     foreach ($bids as $i => $bid) {
         $row   = $i + 2;

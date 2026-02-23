@@ -188,7 +188,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
             <a href="?<?= http_build_query(array_merge($_GET, ['source'=>'','page'=>1])) ?>" class="filter-link <?= $filters['source']===''?'active':'' ?>">
               전체 <span class="count"><?= $source_counts['전체'] ?? 0 ?></span>
             </a>
-            <?php foreach (['나라장터','K-스타트업','IITP','중소기업기술정보진흥원'] as $s): ?>
+            <?php foreach (['나라장터','K-스타트업'] as $s): ?>
             <a href="?<?= http_build_query(array_merge($_GET, ['source'=>$s,'page'=>1])) ?>" class="filter-link <?= $filters['source']===$s?'active':'' ?>">
               <?= htmlspecialchars($s) ?> <span class="count"><?= $source_counts[$s] ?? 0 ?></span>
             </a>
@@ -216,22 +216,22 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           </div>
         </div>
 
-        <div class="filter-group">
-          <div class="filter-label">키워드 관리</div>
-          <form method="POST" action="keyword_add.php" style="display:flex;gap:6px;margin-bottom:8px">
-            <input type="text" name="keyword" placeholder="추가" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-            <button type="submit" class="btn btn-primary" style="padding:6px 12px">+</button>
-          </form>
-          <?php foreach ($keywords as $kw): ?>
-          <div style="display:inline-flex;align-items:center;gap:4px;margin:2px">
-            <span style="font-size:12px"><?= htmlspecialchars($kw['keyword']) ?></span>
-            <a href="keyword_delete.php?id=<?= $kw['id'] ?>" onclick="return confirm('삭제?')" style="color:var(--text-dim);font-size:14px">×</a>
-          </div>
-          <?php endforeach; ?>
-        </div>
-
         <button type="submit" class="btn-filter">필터 적용</button>
       </form>
+
+      <div class="filter-group" style="margin-top:20px">
+        <div class="filter-label">키워드 관리</div>
+        <form method="POST" action="keyword_add.php" style="display:flex;gap:6px;margin-bottom:8px">
+          <input type="text" name="keyword" placeholder="키워드 입력 후 + 클릭" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" required>
+          <button type="submit" class="btn btn-primary" style="padding:6px 12px">+</button>
+        </form>
+        <?php foreach ($keywords as $kw): ?>
+        <div style="display:inline-flex;align-items:center;gap:4px;margin:2px">
+          <span style="font-size:12px"><?= htmlspecialchars($kw['keyword']) ?></span>
+          <a href="keyword_delete.php?id=<?= $kw['id'] ?>" onclick="return confirm('삭제?')" style="color:var(--text-dim);font-size:14px">×</a>
+        </div>
+        <?php endforeach; ?>
+      </div>
     </div>
   </aside>
 
