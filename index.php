@@ -11,6 +11,7 @@ require_once 'api_fetch.php';
 $filters = [
     'search'   => trim($_GET['search'] ?? ''),
     'source'   => trim($_GET['source'] ?? ''),
+    'sources'  => isset($_GET['sources']) && $_GET['sources'] !== '' ? array_filter(array_map('trim', explode(',', (string)$_GET['sources']))) : [],
     'deadline' => trim($_GET['deadline'] ?? ''),
     'tag'      => isset($_GET['tag']) ? (int)$_GET['tag'] : 0,
     'from'     => trim($_GET['from'] ?? ''),
@@ -71,7 +72,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .search-wrap{position:relative;margin-bottom:20px}
 .search-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px 10px 36px;font-size:14px;outline:none;transition:border-color .2s}
 .search-input:focus{border-color:var(--accent)}
-.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-dim)}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-dim);cursor:pointer}
 .suggest-list{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:200px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.1)}
 .suggest-item{display:block;padding:10px 14px;font-size:13px;color:var(--text);text-decoration:none;border-bottom:1px solid var(--border)}
 .suggest-item:last-child{border-bottom:none}
@@ -85,6 +86,14 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .filter-link:hover{background:var(--surface2);color:var(--text)}
 .filter-link.active{background:var(--accent-light);color:var(--accent);font-weight:500}
 .filter-link .count{font-size:11px;color:var(--text-dim);background:var(--surface2);padding:2px 8px;border-radius:10px}
+
+.multi-select{position:relative}
+.multi-select-toggle{width:100%;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);font-size:13px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.multi-select-toggle span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.multi-select-menu{position:absolute;top:110%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:60;max-height:220px;overflow-y:auto;padding:6px 0;display:none}
+.multi-select-item{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;font-size:13px;cursor:pointer;gap:6px}
+.multi-select-item input{margin-right:6px}
+.multi-select-item:hover{background:var(--accent-light)}
 
 .tag-btns{display:flex;flex-wrap:wrap;gap:6px}
 .tag-btn{display:inline-block;padding:6px 12px;border-radius:6px;font-size:12px;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);text-decoration:none;transition:all .15s}
@@ -173,18 +182,44 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           <div class="suggest-list" id="suggestList" style="display:none"></div>
         </div>
 
+        <?php
+          $selectedSources = $filters['sources'];
+          if (!$selectedSources && $filters['source'] !== '') {
+            $selectedSources = [$filters['source']];
+          }
+        ?>
         <div class="filter-group">
-          <div class="filter-label">출처</div>
-          <div class="filter-options">
-            <a href="?<?= http_build_query(array_merge($_GET, ['source'=>'','page'=>1])) ?>" class="filter-link <?= $filters['source']===''?'active':'' ?>">
-              전체 <span class="count"><?= $source_counts['전체'] ?? 0 ?></span>
-            </a>
-            <?php foreach (['나라장터','K-스타트업','중소벤처24','기업마당'] as $s): ?>
-            <a href="?<?= http_build_query(array_merge($_GET, ['source'=>$s,'page'=>1])) ?>" class="filter-link <?= $filters['source']===$s?'active':'' ?>">
-              <?= htmlspecialchars($s) ?> <span class="count"><?= $source_counts[$s] ?? 0 ?></span>
-            </a>
-            <?php endforeach; ?>
+          <div class="filter-label">사이트명</div>
+          <div class="multi-select" id="sourceMulti">
+            <button type="button" class="multi-select-toggle" id="sourceToggle">
+              <span>
+                <?php if (empty($selectedSources)): ?>
+                  전체 사이트
+                <?php else: ?>
+                  <?= htmlspecialchars(implode(', ', $selectedSources)) ?>
+                <?php endif; ?>
+              </span>
+              <span style="font-size:11px;color:var(--text-dim)">▼</span>
+            </button>
+            <div class="multi-select-menu" id="sourceMenu">
+              <label class="multi-select-item">
+                <span>
+                  <input type="checkbox" value="__all" <?= empty($selectedSources) ? 'checked' : '' ?>> 전체
+                </span>
+                <span class="count"><?= (int)($source_counts['전체'] ?? 0) ?></span>
+              </label>
+              <?php foreach ($source_counts as $name => $cnt): if ($name === '전체') continue; ?>
+              <label class="multi-select-item">
+                <span>
+                  <input type="checkbox" class="source-option" value="<?= htmlspecialchars($name) ?>" <?= in_array($name, $selectedSources, true) ? 'checked' : '' ?>>
+                  <?= htmlspecialchars($name) ?>
+                </span>
+                <span class="count"><?= (int)$cnt ?></span>
+              </label>
+              <?php endforeach; ?>
+            </div>
           </div>
+          <input type="hidden" name="sources" id="sourcesInput" value="<?= htmlspecialchars(implode(',', $selectedSources)) ?>">
         </div>
 
         <div class="filter-group">
@@ -329,6 +364,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
   const searchInput = document.getElementById('searchInput');
   const suggestList = document.getElementById('suggestList');
+  const searchIcon  = document.querySelector('.search-icon');
+  const sourceToggle = document.getElementById('sourceToggle');
+  const sourceMenu   = document.getElementById('sourceMenu');
+  const sourcesInput = document.getElementById('sourcesInput');
   let suggestTimer;
 
   function fetchSuggest(q){
@@ -361,6 +400,63 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
   function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
+  // 돋보기 아이콘 클릭 시 검색 실행
+  if (searchIcon) {
+    searchIcon.addEventListener('click', () => {
+      const form = document.getElementById('filterForm');
+      if (form) {
+        form.submit();
+      }
+    });
+  }
+
+  // 사이트명 멀티 선택 드롭다운
+  if (sourceToggle && sourceMenu && sourcesInput) {
+    const allCheckbox = sourceMenu.querySelector('input[value="__all"]');
+    const optionCheckboxes = Array.from(sourceMenu.querySelectorAll('.source-option'));
+
+    function updateHiddenInput() {
+      const selected = optionCheckboxes.filter(ch => ch.checked).map(ch => ch.value);
+      if (allCheckbox) {
+        allCheckbox.checked = selected.length === 0;
+      }
+      sourcesInput.value = selected.join(',');
+      const labelSpan = sourceToggle.querySelector('span');
+      if (labelSpan) {
+        labelSpan.textContent = selected.length === 0 ? '전체 사이트' : selected.join(', ');
+      }
+    }
+
+    sourceToggle.addEventListener('click', () => {
+      const isOpen = sourceMenu.style.display === 'block';
+      sourceMenu.style.display = isOpen ? 'none' : 'block';
+    });
+
+    if (allCheckbox) {
+      allCheckbox.addEventListener('change', () => {
+        if (allCheckbox.checked) {
+          optionCheckboxes.forEach(ch => { ch.checked = false; });
+        }
+        updateHiddenInput();
+      });
+    }
+
+    optionCheckboxes.forEach(ch => {
+      ch.addEventListener('change', () => {
+        if (allCheckbox && ch.checked) {
+          allCheckbox.checked = false;
+        }
+        updateHiddenInput();
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!sourceMenu.contains(e.target) && !sourceToggle.contains(e.target)) {
+        sourceMenu.style.display = 'none';
+      }
+    });
+  }
+
   // 체크박스 전체 선택
   const checkAll = document.getElementById('checkAll');
   const rowChecks = document.querySelectorAll('.row-check');
@@ -375,7 +471,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     });
   }
 
-  // 엑셀 다운로드: 체크된 공고만, 없으면 전체
+  // 엑셀 다운로드: 체크한 행만 / 안 했으면 필터된 목록 전체
   const btnExport = document.getElementById('btnExport');
   if (btnExport) {
     btnExport.addEventListener('click', () => {

@@ -18,6 +18,7 @@ class Database {
     public function getBids(array $filters): array {
         $search   = trim($filters['search'] ?? '');
         $source   = trim($filters['source'] ?? '');
+        $sources  = $filters['sources'] ?? [];
         $deadline = trim($filters['deadline'] ?? '');
         $tagId    = isset($filters['tag']) ? (int)$filters['tag'] : 0;
         $from     = trim($filters['from'] ?? '');
@@ -29,13 +30,25 @@ class Database {
         $where   = ['1=1'];
         $params  = [];
 
+        if (!is_array($sources)) {
+            $sources = $sources !== '' ? array_filter(array_map('trim', explode(',', (string)$sources))) : [];
+        }
+        if (!$sources && $source !== '') {
+            $sources = [$source];
+        }
+
         if ($search) {
             $where[] = '(b.title LIKE :search OR b.org_name LIKE :search)';
             $params[':search'] = "%{$search}%";
         }
-        if ($source) {
-            $where[] = 'b.source = :source';
-            $params[':source'] = $source;
+        if ($sources) {
+            $inPlaceholders = [];
+            foreach ($sources as $idx => $src) {
+                $key = ":src{$idx}";
+                $inPlaceholders[] = $key;
+                $params[$key] = $src;
+            }
+            $where[] = 'b.source IN (' . implode(',', $inPlaceholders) . ')';
         }
         if ($deadline) {
             $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL :days DAY)';
@@ -220,6 +233,7 @@ class Database {
         $params = [];
         $search = trim($filters['search'] ?? '');
         $source = trim($filters['source'] ?? '');
+        $sources = $filters['sources'] ?? [];
         $deadline = trim($filters['deadline'] ?? '');
         $tagId = isset($filters['tag']) ? (int)$filters['tag'] : 0;
 
@@ -228,8 +242,19 @@ class Database {
             $where[] = "b.id IN ({$placeholders})";
             $params = array_merge($params, $ids);
         }
+        if (!is_array($sources)) {
+            $sources = $sources !== '' ? array_filter(array_map('trim', explode(',', (string)$sources))) : [];
+        }
+        if (!$sources && $source !== '') {
+            $sources = [$source];
+        }
+
         if ($search) { $where[] = '(b.title LIKE ? OR b.org_name LIKE ?)'; $params[] = "%{$search}%"; $params[] = "%{$search}%"; }
-        if ($source) { $where[] = 'b.source = ?'; $params[] = $source; }
+        if ($sources) {
+            $placeholders = implode(',', array_fill(0, count($sources), '?'));
+            $where[] = "b.source IN ({$placeholders})";
+            $params = array_merge($params, $sources);
+        }
         if ($deadline) { $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)'; $params[] = (int)$deadline; }
         if ($tagId) {
             $tagKw = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");

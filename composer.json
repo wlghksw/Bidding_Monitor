@@ -1,0 +1,11 @@
+{
+    "name": "bidding-monitor/app",
+    "description": "입찰 공고 모니터 - 엑셀 내보내기",
+    "require": {
+        "php": ">=8.0",
+        "phpoffice/phpspreadsheet": "^1.29"
+    },
+    "autoload": {
+        "classmap": []
+    }
+}
