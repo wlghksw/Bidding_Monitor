@@ -275,12 +275,16 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           $rowNo = ($page - 1) * $per_page + $i + 1;
           $deadline_class = getDeadlineClass($bid['deadline_date'] ?? '');
           $source_class = getSourceClass($bid['source']);
+          $linkUrl = $bid['url'] ?? '';
+          if (($bid['source'] ?? '') === '기업마당' && $linkUrl !== '' && strpos($linkUrl, 'http') !== 0) {
+            $linkUrl = 'https://www.bizinfo.go.kr' . (strpos($linkUrl, '/') === 0 ? $linkUrl : '/' . $linkUrl);
+          }
         ?>
           <tr>
             <td style="text-align:center"><input type="checkbox" class="row-check" value="<?= $bid['id'] ?>"></td>
             <td><?= $rowNo ?></td>
             <td class="title-cell">
-              <a href="<?= htmlspecialchars($bid['url']) ?>" target="_blank" title="공고 상세 보기"><?= htmlspecialchars($bid['title']) ?></a>
+              <a href="<?= htmlspecialchars($linkUrl) ?>" target="_blank" title="공고 상세 보기"><?= htmlspecialchars($bid['title']) ?></a>
             </td>
             <td><?= htmlspecialchars($bid['org_name'] ?? '-') ?></td>
             <td><span class="deadline <?= $deadline_class ?>"><?= htmlspecialchars($bid['deadline_date'] ?? '-') ?></span></td>

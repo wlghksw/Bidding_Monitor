@@ -43,6 +43,10 @@ function exportExcel(Database $db, array $selectedIds, array $filters): void {
 
     foreach ($bids as $i => $bid) {
         $row = $i + 2;
+        $linkUrl = $bid['url'] ?? '';
+        if (($bid['source'] ?? '') === '기업마당' && $linkUrl !== '' && strpos($linkUrl, 'http') !== 0) {
+            $linkUrl = 'https://www.bizinfo.go.kr' . (strpos($linkUrl, '/') === 0 ? $linkUrl : '/' . $linkUrl);
+        }
         $sheet->setCellValue("A{$row}", $i + 1);
         $sheet->setCellValue("B{$row}", $bid['title']);
         $sheet->setCellValue("C{$row}", $bid['source']);
@@ -51,8 +55,8 @@ function exportExcel(Database $db, array $selectedIds, array $filters): void {
         $sheet->setCellValue("F{$row}", $bid['matched_keywords'] ?? '-');
         $sheet->setCellValue("G{$row}", $bid['budget']);
         $sheet->setCellValue("H{$row}", date('Y-m-d', strtotime($bid['fetched_at'])));
-        $sheet->setCellValue("I{$row}", $bid['url']);
-        $sheet->getCell("I{$row}")->getHyperlink()->setUrl($bid['url']);
+        $sheet->setCellValue("I{$row}", $linkUrl);
+        $sheet->getCell("I{$row}")->getHyperlink()->setUrl($linkUrl);
 
         if ($row % 2 === 0) {
             $sheet->getStyle("A{$row}:I{$row}")->getFill()

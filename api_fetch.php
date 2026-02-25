@@ -272,6 +272,8 @@ class ApiFetch {
             if (!$title) continue;
             if (!$link) {
                 $link = 'https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/list.do';
+            } elseif (strpos($link, 'http') !== 0) {
+                $link = 'https://www.bizinfo.go.kr' . (strpos($link, '/') === 0 ? $link : '/' . $link);
             }
 
             $pubDate = trim((string)($item['reqstBeginEndDe'] ?? $item['pubDate'] ?? ''));
