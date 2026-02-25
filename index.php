@@ -102,35 +102,26 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .btn-primary{background:var(--accent);color:#fff}
 .btn-excel{background:#fff;border:1px solid var(--green);color:var(--green)}
 
-.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
-.bid-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;transition:all .2s;position:relative}
-.bid-card:hover{border-color:var(--accent);box-shadow:0 4px 12px rgba(37,99,235,.1)}
-.bid-card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
-.bid-card-title{font-size:15px;font-weight:600;line-height:1.4;color:var(--text);text-decoration:none;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.bid-card-title:hover{color:var(--accent)}
-.bookmark-btn{flex-shrink:0;width:32px;height:32px;border:none;background:transparent;cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.5;transition:opacity .2s}
-.bookmark-btn:hover{opacity:1}
-.bookmark-btn.active{opacity:1}
-.bookmark-btn.active::before{content:'★'}
-.bookmark-btn:not(.active)::before{content:'☆'}
-
-.bid-card-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.source-badge{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.bid-table{width:100%;border-collapse:collapse;font-size:13px}
+.bid-table thead{background:var(--surface2)}
+.bid-table th,.bid-table td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left}
+.bid-table th{font-size:12px;color:var(--text-muted);font-weight:600}
+.bid-table tbody tr:hover{background:var(--accent-light)}
+.bid-table .title-cell a{color:var(--text);text-decoration:none}
+.bid-table .title-cell a:hover{color:var(--accent)}
+.bid-table .source-badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:500}
 .source-nara{background:#eff6ff;color:var(--accent)}
 .source-kstartup{background:#ecfdf5;color:var(--green)}
+.source-smes24{background:#f5f3ff;color:#6d28d9}
+.source-bizinfo{background:#fef3c7;color:#b45309}
 .source-smtech{background:#fff7ed;color:var(--orange)}
 .source-iitp{background:#fef2f2;color:var(--red)}
-
-.bid-card-org{font-size:13px;color:var(--text-muted);margin-bottom:8px}
-.bid-card-keywords{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
-.kw-tag{font-size:11px;padding:2px 8px;background:var(--surface2);border-radius:4px;color:var(--text-muted)}
-.bid-card-footer{display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border);font-size:12px}
-.bid-card-amount{font-weight:600;color:var(--text)}
 .deadline{font-size:12px}
 .deadline.urgent{color:var(--red);font-weight:600}
 .deadline.soon{color:var(--orange)}
 .deadline.normal{color:var(--text-muted)}
-.new-badge{display:inline-block;background:#ecfdf5;color:var(--green);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px}
+.kw-badge{display:inline-block;font-size:11px;padding:2px 6px;margin:1px;background:var(--surface2);border-radius:4px;color:var(--text-muted)}
 
 .pagination{display:flex;justify-content:space-between;align-items:center;margin-top:24px;flex-wrap:wrap;gap:12px}
 .page-buttons{display:flex;gap:6px}
@@ -188,7 +179,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
             <a href="?<?= http_build_query(array_merge($_GET, ['source'=>'','page'=>1])) ?>" class="filter-link <?= $filters['source']===''?'active':'' ?>">
               전체 <span class="count"><?= $source_counts['전체'] ?? 0 ?></span>
             </a>
-            <?php foreach (['나라장터','K-스타트업'] as $s): ?>
+            <?php foreach (['나라장터','K-스타트업','중소벤처24','기업마당'] as $s): ?>
             <a href="?<?= http_build_query(array_merge($_GET, ['source'=>$s,'page'=>1])) ?>" class="filter-link <?= $filters['source']===$s?'active':'' ?>">
               <?= htmlspecialchars($s) ?> <span class="count"><?= $source_counts[$s] ?? 0 ?></span>
             </a>
@@ -255,47 +246,58 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           <option value="deadline" <?= $filters['sort']==='deadline'?'selected':'' ?>>마감일순</option>
           <option value="amount" <?= $filters['sort']==='amount'?'selected':'' ?>>금액순</option>
         </select>
-        <a href="?<?= http_build_query(array_merge($_GET,['export'=>'all'])) ?>" class="btn btn-excel">엑셀 다운로드</a>
+        <button type="button" class="btn btn-excel" id="btnExport">엑셀 다운로드</button>
       </div>
     </form>
 
-    <!-- 카드 리스트 -->
-    <div class="card-grid" id="cardGrid">
+    <!-- 테이블 리스트 -->
+    <div class="table-wrap">
       <?php if (empty($bids)): ?>
-        <div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-state">
           <div style="font-size:48px;margin-bottom:16px">📭</div>
           <div>검색 결과가 없습니다.</div>
         </div>
       <?php else: ?>
-        <?php foreach ($bids as $bid):
+      <table class="bid-table">
+        <thead>
+          <tr>
+            <th style="width:36px;text-align:center"><input type="checkbox" id="checkAll"></th>
+            <th style="width:60px">순번</th>
+            <th>공고명</th>
+            <th style="width:120px">주관기관</th>
+            <th style="width:100px">마감일</th>
+            <th style="width:100px">사이트 명</th>
+            <th style="width:180px">키워드</th>
+          </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($bids as $i => $bid):
+          $rowNo = ($page - 1) * $per_page + $i + 1;
           $deadline_class = getDeadlineClass($bid['deadline_date'] ?? '');
           $source_class = getSourceClass($bid['source']);
-          $is_new = !empty($bid['created_at']) && strtotime($bid['created_at']) >= strtotime('today');
         ?>
-        <article class="bid-card" data-bid-id="<?= $bid['id'] ?>">
-          <div class="bid-card-header">
-            <a href="<?= htmlspecialchars($bid['url']) ?>" target="_blank" class="bid-card-title" title="<?= htmlspecialchars($bid['title']) ?>">
-              <?= htmlspecialchars($bid['title']) ?><?php if($is_new): ?><span class="new-badge">NEW</span><?php endif; ?>
-            </a>
-            <button type="button" class="bookmark-btn" data-bid-id="<?= $bid['id'] ?>" aria-label="스크랩" title="관심 공고"></button>
-          </div>
-          <div class="bid-card-meta">
-            <span class="source-badge <?= $source_class ?>"><?= htmlspecialchars($bid['source']) ?></span>
-          </div>
-          <div class="bid-card-org"><?= htmlspecialchars($bid['org_name'] ?? '-') ?></div>
-          <?php if (!empty($bid['matched_keywords'])): ?>
-          <div class="bid-card-keywords">
-            <?php foreach (explode(',', $bid['matched_keywords']) as $kw): ?>
-              <?php if(trim($kw)): ?><span class="kw-tag"><?= htmlspecialchars(trim($kw)) ?></span><?php endif; ?>
-            <?php endforeach; ?>
-          </div>
-          <?php endif; ?>
-          <div class="bid-card-footer">
-            <span class="bid-card-amount"><?= htmlspecialchars($bid['budget'] ?? '-') ?></span>
-            <span class="deadline <?= $deadline_class ?>"><?= htmlspecialchars($bid['deadline_date'] ?? '-') ?></span>
-          </div>
-        </article>
+          <tr>
+            <td style="text-align:center"><input type="checkbox" class="row-check" value="<?= $bid['id'] ?>"></td>
+            <td><?= $rowNo ?></td>
+            <td class="title-cell">
+              <a href="<?= htmlspecialchars($bid['url']) ?>" target="_blank" title="공고 상세 보기"><?= htmlspecialchars($bid['title']) ?></a>
+            </td>
+            <td><?= htmlspecialchars($bid['org_name'] ?? '-') ?></td>
+            <td><span class="deadline <?= $deadline_class ?>"><?= htmlspecialchars($bid['deadline_date'] ?? '-') ?></span></td>
+            <td><span class="source-badge <?= $source_class ?>"><?= htmlspecialchars($bid['source']) ?></span></td>
+            <td>
+              <?php if (!empty($bid['matched_keywords'])): ?>
+                <?php foreach (explode(',', $bid['matched_keywords']) as $kw): ?>
+                  <?php if (trim($kw)): ?><span class="kw-badge"><?= htmlspecialchars(trim($kw)) ?></span><?php endif; ?>
+                <?php endforeach; ?>
+              <?php else: ?>
+                -
+              <?php endif; ?>
+            </td>
+          </tr>
         <?php endforeach; ?>
+        </tbody>
+      </table>
       <?php endif; ?>
     </div>
 
@@ -320,18 +322,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   function getBookmarks(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch(e){return []}}
   function setBookmarks(arr){localStorage.setItem(STORAGE_KEY,JSON.stringify(arr))}
   function isBookmarked(id){return getBookmarks().includes(id)}
-
-  document.querySelectorAll('.bookmark-btn').forEach(btn=>{
-    const id = parseInt(btn.dataset.bidId,10);
-    if(isBookmarked(id)) btn.classList.add('active');
-    btn.addEventListener('click',function(){
-      let arr = getBookmarks();
-      if(arr.includes(id)) arr = arr.filter(x=>x!==id);
-      else arr.push(id);
-      setBookmarks(arr);
-      btn.classList.toggle('active');
-    });
-  });
 
   const searchInput = document.getElementById('searchInput');
   const suggestList = document.getElementById('suggestList');
@@ -366,6 +356,36 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   searchInput.addEventListener('blur',()=>setTimeout(()=>{ suggestList.style.display='none'; },150));
 
   function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+  // 체크박스 전체 선택
+  const checkAll = document.getElementById('checkAll');
+  const rowChecks = document.querySelectorAll('.row-check');
+  if (checkAll && rowChecks.length) {
+    checkAll.addEventListener('change', () => {
+      rowChecks.forEach(ch => { ch.checked = checkAll.checked; });
+    });
+    rowChecks.forEach(ch => {
+      ch.addEventListener('change', () => {
+        if (!ch.checked) checkAll.checked = false;
+      });
+    });
+  }
+
+  // 엑셀 다운로드: 체크된 공고만, 없으면 전체
+  const btnExport = document.getElementById('btnExport');
+  if (btnExport) {
+    btnExport.addEventListener('click', () => {
+      const checked = Array.from(document.querySelectorAll('.row-check:checked')).map(ch => ch.value);
+      const url = new URL(window.location.href);
+      url.searchParams.set('export', '1');
+      if (checked.length) {
+        url.searchParams.set('ids', checked.join(','));
+      } else {
+        url.searchParams.delete('ids');
+      }
+      window.location.href = url.toString();
+    });
+  }
 })();
 </script>
 </body>
@@ -381,7 +401,7 @@ function getDeadlineClass(string $dateStr): string {
 }
 function getSourceClass(string $source): string {
   return match($source){
-    '나라장터'=>'source-nara','K-스타트업'=>'source-kstartup',
+    '나라장터'=>'source-nara','K-스타트업'=>'source-kstartup','중소벤처24'=>'source-smes24','기업마당'=>'source-bizinfo',
     '중소기업기술정보진흥원'=>'source-smtech','IITP'=>'source-iitp',
     default=>'source-nara'
   };

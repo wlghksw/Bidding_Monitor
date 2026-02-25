@@ -63,6 +63,9 @@ class Database {
             $params[':date_to'] = $to;
         }
 
+        // 기본: 마감일이 지나지 않은 공고만 노출 (당일 포함)
+        $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
+
         $orderBy = match($sort) {
             'deadline' => 'b.deadline_date ASC',
             'amount'   => 'b.budget_raw DESC',
@@ -180,12 +183,26 @@ class Database {
 
     // ── 공고 저장 (중복 방지) ──
     public function saveBid(array $bid): int {
-        $sql = "INSERT INTO bids (title, url, source, org_name, budget, budget_raw, deadline_date, fetched_at)
-                VALUES (:title, :url, :source, :org_name, :budget, :budget_raw, :deadline_date, NOW())
-                ON DUPLICATE KEY UPDATE fetched_at = NOW()";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($bid);
-        return (int) $this->pdo->lastInsertId();
+        $defaults = [':region' => null, ':support_field' => null, ':receipt_period' => null];
+        $bid = $bid + $defaults;
+        $sqlExtended = "INSERT INTO bids (title, url, source, org_name, budget, budget_raw, deadline_date, region, support_field, receipt_period, fetched_at)
+                VALUES (:title, :url, :source, :org_name, :budget, :budget_raw, :deadline_date, :region, :support_field, :receipt_period, NOW())
+                ON DUPLICATE KEY UPDATE region=VALUES(region), support_field=VALUES(support_field), receipt_period=VALUES(receipt_period), fetched_at=NOW()";
+        try {
+            $stmt = $this->pdo->prepare($sqlExtended);
+            $stmt->execute($bid);
+            return (int) $this->pdo->lastInsertId();
+        } catch (PDOException $e) {
+            if ($e->getCode() === '42S22' || strpos($e->getMessage(), 'Unknown column') !== false) {
+                $sqlShort = "INSERT INTO bids (title, url, source, org_name, budget, budget_raw, deadline_date, fetched_at)
+                        VALUES (:title, :url, :source, :org_name, :budget, :budget_raw, :deadline_date, NOW())
+                        ON DUPLICATE KEY UPDATE fetched_at=NOW()";
+                $stmt = $this->pdo->prepare($sqlShort);
+                $stmt->execute(array_diff_key($bid, [':region' => 1, ':support_field' => 1, ':receipt_period' => 1]));
+                return (int) $this->pdo->lastInsertId();
+            }
+            throw $e;
+        }
     }
 
     // ── 키워드 매칭 저장 ──
@@ -229,8 +246,7 @@ class Database {
             }
         }
 
-        $sql = "SELECT b.title, b.url, b.source, b.org_name, b.budget, b.deadline_date,
-                       b.fetched_at, GROUP_CONCAT(k.keyword) AS matched_keywords
+        $sql = "SELECT b.*, GROUP_CONCAT(k.keyword) AS matched_keywords
                 FROM bids b
                 LEFT JOIN bid_keywords bk ON bk.bid_id = b.id
                 LEFT JOIN keywords k ON k.id = bk.keyword_id

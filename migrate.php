@@ -11,6 +11,8 @@ $alter = [
     "ALTER TABLE bids ADD COLUMN bid_type VARCHAR(50) DEFAULT NULL AFTER budget_raw",
     "ALTER TABLE bids ADD COLUMN status VARCHAR(50) DEFAULT '입찰공고' AFTER bid_type",
     "ALTER TABLE bids ADD COLUMN notice_date DATE DEFAULT NULL AFTER deadline_date",
+    "ALTER TABLE bids ADD COLUMN support_field VARCHAR(100) DEFAULT NULL COMMENT '지원분야' AFTER region",
+    "ALTER TABLE bids ADD COLUMN receipt_period VARCHAR(100) DEFAULT NULL COMMENT '접수기간' AFTER deadline_date",
 ];
 
 foreach ($alter as $sql) {
