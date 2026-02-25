@@ -66,6 +66,3 @@
 | `SMES24_DAYS` | 중소벤처24 조회 기간(일) |
 | `BIZINFO_API_KEY` | 기업마당 서비스키 (crtfcKey) |
 
-## 라이선스
-
-MIT
