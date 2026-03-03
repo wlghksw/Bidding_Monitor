@@ -8,12 +8,23 @@ require_once 'config.php';
 require_once 'db.php';
 require_once 'api_fetch.php';
 
+// 태그: 복수 선택. GET tag[] 또는 tags=1,2,3 또는 (구) tag=단일
+$tags = [];
+if (isset($_GET['tag'])) {
+    if (is_array($_GET['tag'])) {
+        $tags = array_filter(array_map('intval', $_GET['tag']));
+    } else {
+        $tags = (int)$_GET['tag'] ? [(int)$_GET['tag']] : [];
+    }
+} elseif (!empty($_GET['tags'])) {
+    $tags = array_filter(array_map('intval', explode(',', (string)$_GET['tags'])));
+}
 $filters = [
     'search'   => trim($_GET['search'] ?? ''),
     'source'   => trim($_GET['source'] ?? ''),
     'sources'  => isset($_GET['sources']) && $_GET['sources'] !== '' ? array_filter(array_map('trim', explode(',', (string)$_GET['sources']))) : [],
     'deadline' => trim($_GET['deadline'] ?? ''),
-    'tag'      => isset($_GET['tag']) ? (int)$_GET['tag'] : 0,
+    'tags'     => $tags,
     'from'     => trim($_GET['from'] ?? ''),
     'to'       => trim($_GET['to'] ?? ''),
     'sort'     => trim($_GET['sort'] ?? 'newest'),
@@ -172,8 +183,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <form method="GET" action="index.php" id="filterForm">
         <input type="hidden" name="source" value="<?= htmlspecialchars($filters['source']) ?>">
         <input type="hidden" name="deadline" value="<?= htmlspecialchars($filters['deadline']) ?>">
-        <input type="hidden" name="tag" value="<?= $filters['tag'] ?>">
         <input type="hidden" name="sort" value="<?= htmlspecialchars($filters['sort']) ?>">
+        <?php foreach ($filters['tags'] as $tid): ?><input type="hidden" name="tag[]" value="<?= (int)$tid ?>"><?php endforeach; ?>
 
         <div class="filter-title">공고명 · 기관명 검색</div>
         <div class="search-wrap" style="margin-bottom:20px">
@@ -235,11 +246,28 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <div class="filter-group">
           <div class="filter-label">태그 검색</div>
           <div class="tag-btns">
-            <a href="?<?= http_build_query(array_merge($_GET, ['tag'=>'','page'=>1])) ?>" class="tag-btn <?= !$filters['tag']?'active':'' ?>">전체</a>
-            <?php foreach ($keywords as $kw): ?>
-            <a href="?<?= http_build_query(array_merge($_GET, ['tag'=>$kw['id'],'page'=>1])) ?>" class="tag-btn <?= $filters['tag']==$kw['id']?'active':'' ?>"><?= htmlspecialchars($kw['keyword']) ?></a>
+            <?php
+            $tagQuery = $_GET;
+            unset($tagQuery['tag'], $tagQuery['tags']);
+            $tagQuery['page'] = 1;
+            ?>
+            <a href="?<?= http_build_query($tagQuery) ?>" class="tag-btn <?= empty($filters['tags']) ? 'active' : '' ?>">전체</a>
+            <?php foreach ($keywords as $kw):
+              $q = $_GET;
+              $q['page'] = 1;
+              unset($q['tag']);
+              if (in_array((int)$kw['id'], $filters['tags'], true)) {
+                $newTags = array_values(array_diff($filters['tags'], [(int)$kw['id']]));
+                $q['tags'] = $newTags ? implode(',', $newTags) : '';
+              } else {
+                $newTags = array_merge($filters['tags'], [(int)$kw['id']]);
+                $q['tags'] = implode(',', $newTags);
+              }
+            ?>
+            <a href="?<?= http_build_query($q) ?>" class="tag-btn <?= in_array((int)$kw['id'], $filters['tags'], true) ? 'active' : '' ?>"><?= htmlspecialchars($kw['keyword']) ?></a>
             <?php endforeach; ?>
           </div>
+          <p style="font-size:11px;color:var(--text-dim);margin-top:6px">여러 태그 선택 시 해당 키워드 중 하나라도 포함된 공고가 표시됩니다.</p>
         </div>
 
         <button type="submit" class="btn-filter">필터 적용</button>
@@ -274,7 +302,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <input type="hidden" name="search" value="<?= htmlspecialchars($filters['search']) ?>">
       <input type="hidden" name="source" value="<?= htmlspecialchars($filters['source']) ?>">
       <input type="hidden" name="deadline" value="<?= htmlspecialchars($filters['deadline']) ?>">
-      <input type="hidden" name="tag" value="<?= $filters['tag'] ?>">
+      <input type="hidden" name="tags" value="<?= htmlspecialchars(implode(',', $filters['tags'])) ?>">
       <div class="toolbar">
         <select name="sort" class="filter-select" onchange="this.form.submit()">
           <option value="newest" <?= $filters['sort']==='newest'?'selected':'' ?>>최신순</option>
@@ -378,7 +406,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         suggestList.innerHTML = data.keywords.map(k=>{
           const p = new URLSearchParams(window.location.search);
           p.set('search', searchInput.value.trim());
-          p.set('tag', k.id);
+          let tags = (p.get('tags') || '').split(',').filter(Boolean);
+          if (!tags.includes(String(k.id))) tags.push(String(k.id));
+          p.set('tags', tags.join(','));
+          p.delete('tag');
           p.set('page', '1');
           return '<a href="?'+p.toString()+'" class="suggest-item">'+escapeHtml(k.keyword)+'</a>';
         }).join('');

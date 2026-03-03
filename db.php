@@ -20,7 +20,12 @@ class Database {
         $source   = trim($filters['source'] ?? '');
         $sources  = $filters['sources'] ?? [];
         $deadline = trim($filters['deadline'] ?? '');
-        $tagId    = isset($filters['tag']) ? (int)$filters['tag'] : 0;
+        $tagIds   = $filters['tags'] ?? [];
+        if (!is_array($tagIds)) {
+            $tagIds = isset($filters['tag']) && (int)$filters['tag'] ? [(int)$filters['tag']] : [];
+        } else {
+            $tagIds = array_filter(array_map('intval', $tagIds));
+        }
         $from     = trim($filters['from'] ?? '');
         $to       = trim($filters['to'] ?? '');
         $sort     = trim($filters['sort'] ?? 'newest');
@@ -54,18 +59,25 @@ class Database {
             $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL :days DAY)';
             $params[':days'] = (int)$deadline;
         }
-        if ($tagId) {
-            $tagKeyword = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
-            $tagKeyword->execute([$tagId]);
-            $tagText = $tagKeyword->fetchColumn();
-            if ($tagText !== false && $tagText !== '') {
-                $where[] = '(EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tag_id) OR (b.title LIKE :tag_like OR b.org_name LIKE :tag_like))';
-                $params[':tag_id']   = $tagId;
-                $params[':tag_like'] = '%' . $tagText . '%';
-            } else {
-                $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tag_id)';
-                $params[':tag_id'] = $tagId;
+        if ($tagIds) {
+            $tagPlaceholders = [];
+            $tagLikeConditions = [];
+            foreach ($tagIds as $idx => $tid) {
+                $tagPlaceholders[] = ":tagid{$idx}";
+                $params[":tagid{$idx}"] = $tid;
+                $stmt = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
+                $stmt->execute([$tid]);
+                $tagText = $stmt->fetchColumn();
+                if ($tagText !== false && $tagText !== '') {
+                    $tagLikeConditions[] = "(b.title LIKE :taglike{$idx} OR b.org_name LIKE :taglike{$idx})";
+                    $params[":taglike{$idx}"] = '%' . $tagText . '%';
+                }
             }
+            $tagWhere = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id IN (' . implode(',', $tagPlaceholders) . '))';
+            if ($tagLikeConditions) {
+                $tagWhere .= ' OR ' . implode(' OR ', $tagLikeConditions);
+            }
+            $where[] = '(' . $tagWhere . ')';
         }
         if ($from) {
             $where[] = '(b.deadline_date >= :date_from OR b.notice_date >= :date_from)';
@@ -118,22 +130,34 @@ class Database {
         $params = [];
         $search = trim($filters['search'] ?? '');
         $deadline = trim($filters['deadline'] ?? '');
-        $tagId = isset($filters['tag']) ? (int)$filters['tag'] : 0;
+        $tagIds = $filters['tags'] ?? [];
+        if (!is_array($tagIds)) {
+            $tagIds = isset($filters['tag']) && (int)$filters['tag'] ? [(int)$filters['tag']] : [];
+        } else {
+            $tagIds = array_filter(array_map('intval', $tagIds));
+        }
 
         if ($search) { $where[] = '(b.title LIKE :s OR b.org_name LIKE :s)'; $params[':s'] = "%{$search}%"; }
         if ($deadline) { $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL :d DAY)'; $params[':d'] = (int)$deadline; }
-        if ($tagId) {
-            $tagKw = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
-            $tagKw->execute([$tagId]);
-            $tagText = $tagKw->fetchColumn();
-            if ($tagText !== false && $tagText !== '') {
-                $where[] = '(EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tid) OR (b.title LIKE :tlike OR b.org_name LIKE :tlike))';
-                $params[':tid'] = $tagId;
-                $params[':tlike'] = '%' . $tagText . '%';
-            } else {
-                $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = :tid)';
-                $params[':tid'] = $tagId;
+        if ($tagIds) {
+            $tagPlaceholders = [];
+            $tagLikeConditions = [];
+            foreach ($tagIds as $idx => $tid) {
+                $tagPlaceholders[] = ":tid{$idx}";
+                $params[":tid{$idx}"] = $tid;
+                $stmt = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
+                $stmt->execute([$tid]);
+                $tagText = $stmt->fetchColumn();
+                if ($tagText !== false && $tagText !== '') {
+                    $tagLikeConditions[] = "(b.title LIKE :tlike{$idx} OR b.org_name LIKE :tlike{$idx})";
+                    $params[":tlike{$idx}"] = '%' . $tagText . '%';
+                }
             }
+            $tagWhere = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id IN (' . implode(',', $tagPlaceholders) . '))';
+            if ($tagLikeConditions) {
+                $tagWhere .= ' OR ' . implode(' OR ', $tagLikeConditions);
+            }
+            $where[] = '(' . $tagWhere . ')';
         }
 
         $whereStr = implode(' AND ', $where);
@@ -235,7 +259,12 @@ class Database {
         $source = trim($filters['source'] ?? '');
         $sources = $filters['sources'] ?? [];
         $deadline = trim($filters['deadline'] ?? '');
-        $tagId = isset($filters['tag']) ? (int)$filters['tag'] : 0;
+        $tagIds = $filters['tags'] ?? [];
+        if (!is_array($tagIds)) {
+            $tagIds = isset($filters['tag']) && (int)$filters['tag'] ? [(int)$filters['tag']] : [];
+        } else {
+            $tagIds = array_filter(array_map('intval', $tagIds));
+        }
 
         if ($ids) {
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -256,19 +285,26 @@ class Database {
             $params = array_merge($params, $sources);
         }
         if ($deadline) { $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)'; $params[] = (int)$deadline; }
-        if ($tagId) {
-            $tagKw = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
-            $tagKw->execute([$tagId]);
-            $tagText = $tagKw->fetchColumn();
-            if ($tagText !== false && $tagText !== '') {
-                $where[] = '(EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = ?) OR (b.title LIKE ? OR b.org_name LIKE ?))';
-                $params[] = $tagId;
-                $params[] = '%' . $tagText . '%';
-                $params[] = '%' . $tagText . '%';
-            } else {
-                $where[] = 'EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id = ?)';
-                $params[] = $tagId;
+        if ($tagIds) {
+            $tagPlaceholders = implode(',', array_fill(0, count($tagIds), '?'));
+            $tagLikeParts = [];
+            $tagLikeParams = [];
+            foreach ($tagIds as $tid) {
+                $stmt = $this->pdo->prepare("SELECT keyword FROM keywords WHERE id = ?");
+                $stmt->execute([$tid]);
+                $tagText = $stmt->fetchColumn();
+                if ($tagText !== false && $tagText !== '') {
+                    $tagLikeParts[] = '(b.title LIKE ? OR b.org_name LIKE ?)';
+                    $tagLikeParams[] = '%' . $tagText . '%';
+                    $tagLikeParams[] = '%' . $tagText . '%';
+                }
             }
+            $tagWhere = "EXISTS (SELECT 1 FROM bid_keywords bk2 WHERE bk2.bid_id = b.id AND bk2.keyword_id IN ({$tagPlaceholders}))";
+            if ($tagLikeParts) {
+                $tagWhere .= ' OR ' . implode(' OR ', $tagLikeParts);
+            }
+            $where[] = '(' . $tagWhere . ')';
+            $params = array_merge($params, $tagIds, $tagLikeParams);
         }
 
         $sql = "SELECT b.*, GROUP_CONCAT(k.keyword) AS matched_keywords

@@ -2,6 +2,13 @@
 // =============================================
 // api_fetch.php - 각 API / 크롤링 수집 클래스
 // =============================================
+// config.php에 없으면 여기서 기본값 사용 (구버전 config 호환)
+if (!defined('G2B_DAYS'))                    define('G2B_DAYS', 90);
+if (!defined('MAX_PAGES_PER_SOURCE'))         define('MAX_PAGES_PER_SOURCE', 50);
+if (!defined('G2B_INCREMENTAL_DAYS'))          define('G2B_INCREMENTAL_DAYS', 3);
+if (!defined('G2B_INCREMENTAL_MAX_PAGES'))    define('G2B_INCREMENTAL_MAX_PAGES', 10);
+if (!defined('KSTARTUP_INCREMENTAL_PAGES'))  define('KSTARTUP_INCREMENTAL_PAGES', 10);
+if (!defined('SMES24_DAYS'))                 define('SMES24_DAYS', 30);
 
 class ApiFetch {
     private Database $db;

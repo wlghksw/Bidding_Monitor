@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS bids (
     budget        VARCHAR(100),
     budget_raw    BIGINT DEFAULT 0,
     deadline_date DATE,
+    notice_date   DATE DEFAULT NULL COMMENT '공고일(정렬/기간필터용)',
     fetched_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_title_source (title(200), source)
@@ -44,4 +45,5 @@ CREATE TABLE IF NOT EXISTS bid_keywords (
 -- 인덱스
 CREATE INDEX idx_bids_fetched   ON bids (fetched_at);
 CREATE INDEX idx_bids_deadline  ON bids (deadline_date);
+CREATE INDEX idx_bids_notice    ON bids (notice_date);
 CREATE INDEX idx_bids_source    ON bids (source);

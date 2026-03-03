@@ -13,13 +13,15 @@ define('DB_CHARSET', 'utf8mb4');
 
 // ── 나라장터 (G2B) OpenAPI ──
 // 발급: https://www.data.go.kr → "입찰공고정보서비스" 검색
+// End Point 예시: https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoServc
 define('G2B_API_KEY', 'YOUR_G2B_API_KEY');
-define('G2B_API_URL', 'https://apis.data.go.kr/1230000/BidPublicInfoService04/getBidPblancListInfoServc');
+define('G2B_API_URL', 'https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoServc');
 
 // ── K-스타트업 OpenAPI ──
 // 발급: https://www.data.go.kr → "창업지원사업공고" 검색
+// End Point 예시: https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInformation01
 define('KSTARTUP_API_KEY', 'YOUR_KSTARTUP_API_KEY');
-define('KSTARTUP_API_URL', 'https://apis.data.go.kr/B552735/kisedKstartupService/getAnnouncList');
+define('KSTARTUP_API_URL', 'https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInformation01');
 
 // ── 중소벤처24 공고정보 API ──
 // 발급: https://www.data.go.kr → "중소벤처24 공고정보" 검색 또는 smes.go.kr API 신청
@@ -33,9 +35,13 @@ define('BIZINFO_API_URL', 'https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do');
 
 // ── 수집 설정 ──
 define('FETCH_INTERVAL_HOURS', 24);   // 수집 주기 (시간)
-define('G2B_DAYS', 90);               // 나라장터 조회 기간 (일)
-define('MAX_PAGES_PER_SOURCE', 50);   // 나라장터 최대 페이지 수
-define('KSTARTUP_MAX_PAGES', 150);    // K-스타트업 최대 페이지
+define('G2B_DAYS', 90);               // 나라장터 전체 수집 시 조회 기간 (일)
+define('MAX_PAGES_PER_SOURCE', 50);   // 나라장터 전체 수집 시 최대 페이지
+define('KSTARTUP_MAX_PAGES', 150);    // K-스타트업 전체 수집 시 최대 페이지
+// 증분 수집 (이미 DB 있는 건 제외, 새 공고만 조회)
+define('G2B_INCREMENTAL_DAYS', 3);         // 나라장터 증분 시 조회 기간(일)
+define('G2B_INCREMENTAL_MAX_PAGES', 10);   // 나라장터 증분 시 최대 페이지
+define('KSTARTUP_INCREMENTAL_PAGES', 10);  // K-스타트업 증분 시 페이지 수 (최신 1000건만)
 
 // ── 타임존 ──
 date_default_timezone_set('Asia/Seoul');
