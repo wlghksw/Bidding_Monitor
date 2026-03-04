@@ -8,7 +8,17 @@ set_time_limit(600); // 수집 시간 10분까지 허용 (50+150 페이지 API �
 
 require_once 'config.php';
 require_once 'db.php';
-require_once 'api_fetch.php';
+require_once __DIR__ . '/src/autoload.php';
+
+use BiddingMonitor\Core\HttpClient;
+use BiddingMonitor\Core\HtmlParser;
+use BiddingMonitor\Core\Runner;
+use BiddingMonitor\Crawler\NaraJangteoCrawler;
+use BiddingMonitor\Crawler\KStartupCrawler;
+use BiddingMonitor\Crawler\Smes24Crawler;
+use BiddingMonitor\Crawler\BizInfoCrawler;
+use BiddingMonitor\Crawler\YdpGuCrawler;
+use BiddingMonitor\Crawler\GanghwaCityCrawler;
 
 $isCli    = php_sapi_name() === 'cli';
 $isManual = isset($_GET['manual']);
@@ -18,13 +28,25 @@ if (!$isCli && !$isManual) {
     exit('직접 접근 불가');
 }
 
-$db      = new Database();
-$fetcher = new ApiFetch($db);
+$db    = new Database();
+$http  = new HttpClient();
+$parser = new HtmlParser();
+
+$crawlers = [
+    new NaraJangteoCrawler($http, $db->getLastFetchedAt('나라장터')),
+    new KStartupCrawler($http),
+    new Smes24Crawler($http),
+    new BizInfoCrawler($http),
+    new YdpGuCrawler($http, $parser),
+    new GanghwaCityCrawler($http, $parser),
+];
+
+$runner  = new Runner($db, $http, $parser);
 
 echo $isCli ? '' : '<pre>';
 echo "[" . date('Y-m-d H:i:s') . "] 수집 시작\n";
 
-$results = $fetcher->fetchAll();
+$results = $runner->run($crawlers);
 
 foreach ($results as $source => $count) {
     echo "[{$source}] 키워드 매칭 공고 {$count}건 저장 완료\n";

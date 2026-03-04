@@ -224,7 +224,17 @@ class Database {
         $bid = $bid + $defaults;
         $sqlExtended = "INSERT INTO bids (title, url, source, org_name, budget, budget_raw, deadline_date, region, support_field, receipt_period, fetched_at)
                 VALUES (:title, :url, :source, :org_name, :budget, :budget_raw, :deadline_date, :region, :support_field, :receipt_period, NOW())
-                ON DUPLICATE KEY UPDATE region=VALUES(region), support_field=VALUES(support_field), receipt_period=VALUES(receipt_period), fetched_at=NOW()";
+                ON DUPLICATE KEY UPDATE
+                    title=VALUES(title),
+                    url=VALUES(url),
+                    org_name=VALUES(org_name),
+                    budget=VALUES(budget),
+                    budget_raw=VALUES(budget_raw),
+                    deadline_date=VALUES(deadline_date),
+                    region=VALUES(region),
+                    support_field=VALUES(support_field),
+                    receipt_period=VALUES(receipt_period),
+                    fetched_at=NOW()";
         try {
             $stmt = $this->pdo->prepare($sqlExtended);
             $stmt->execute($bid);
@@ -233,7 +243,14 @@ class Database {
             if ($e->getCode() === '42S22' || strpos($e->getMessage(), 'Unknown column') !== false) {
                 $sqlShort = "INSERT INTO bids (title, url, source, org_name, budget, budget_raw, deadline_date, fetched_at)
                         VALUES (:title, :url, :source, :org_name, :budget, :budget_raw, :deadline_date, NOW())
-                        ON DUPLICATE KEY UPDATE fetched_at=NOW()";
+                        ON DUPLICATE KEY UPDATE
+                            title=VALUES(title),
+                            url=VALUES(url),
+                            org_name=VALUES(org_name),
+                            budget=VALUES(budget),
+                            budget_raw=VALUES(budget_raw),
+                            deadline_date=VALUES(deadline_date),
+                            fetched_at=NOW()";
                 $stmt = $this->pdo->prepare($sqlShort);
                 $stmt->execute(array_diff_key($bid, [':region' => 1, ':support_field' => 1, ':receipt_period' => 1]));
                 return (int) $this->pdo->lastInsertId();

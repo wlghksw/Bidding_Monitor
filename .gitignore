@@ -11,6 +11,9 @@ composer.lock
 *.swp
 *.swo
 
+# 로그
+/logs/
+
 # OS
 .DS_Store
 Thumbs.db

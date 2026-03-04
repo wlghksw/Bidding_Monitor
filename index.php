@@ -339,8 +339,14 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           $deadline_class = getDeadlineClass($bid['deadline_date'] ?? '');
           $source_class = getSourceClass($bid['source']);
           $linkUrl = $bid['url'] ?? '';
+          // DB에 &amp; 형태로 저장된 URL이 있더라도 클릭 시 정상 이동하도록 복원
+          $linkUrl = html_entity_decode((string)$linkUrl, ENT_QUOTES | ENT_HTML5, 'UTF-8');
           if (($bid['source'] ?? '') === '기업마당' && $linkUrl !== '' && strpos($linkUrl, 'http') !== 0) {
             $linkUrl = 'https://www.bizinfo.go.kr' . (strpos($linkUrl, '/') === 0 ? $linkUrl : '/' . $linkUrl);
+          }
+          // 영등포구청 상세는 /www 하위인데, 과거 데이터에 /www 누락 URL이 있어 417이 발생함
+          if (($bid['source'] ?? '') === '영등포구청' && $linkUrl !== '') {
+            $linkUrl = preg_replace('#^https?://www\\.ydp\\.go\\.kr/selectBbsNttView\\.do#', 'https://www.ydp.go.kr/www/selectBbsNttView.do', $linkUrl);
           }
         ?>
           <tr>
