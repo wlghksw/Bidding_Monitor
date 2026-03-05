@@ -43,6 +43,7 @@ $total_pages = ceil($total / $per_page);
 $stats = $db->getStats();
 $keywords = $db->getKeywords();
 $source_counts = $db->getSourceCounts($filters);
+$tag_counts = $db->getTagCounts($filters);
 
 // 엑셀 다운로드
 if (isset($_GET['export'])) {
@@ -184,7 +185,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <input type="hidden" name="source" value="<?= htmlspecialchars($filters['source']) ?>">
         <input type="hidden" name="deadline" value="<?= htmlspecialchars($filters['deadline']) ?>">
         <input type="hidden" name="sort" value="<?= htmlspecialchars($filters['sort']) ?>">
-        <?php foreach ($filters['tags'] as $tid): ?><input type="hidden" name="tag[]" value="<?= (int)$tid ?>"><?php endforeach; ?>
+        <input type="hidden" name="tags" id="tagsInput" value="<?= htmlspecialchars(implode(',', $filters['tags'])) ?>">
 
         <div class="filter-title">공고명 · 기관명 검색</div>
         <div class="search-wrap" style="margin-bottom:20px">
@@ -245,27 +246,50 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
         <div class="filter-group">
           <div class="filter-label">태그 검색</div>
-          <div class="tag-btns">
-            <?php
-            $tagQuery = $_GET;
-            unset($tagQuery['tag'], $tagQuery['tags']);
-            $tagQuery['page'] = 1;
-            ?>
-            <a href="?<?= http_build_query($tagQuery) ?>" class="tag-btn <?= empty($filters['tags']) ? 'active' : '' ?>">전체</a>
-            <?php foreach ($keywords as $kw):
-              $q = $_GET;
-              $q['page'] = 1;
-              unset($q['tag']);
-              if (in_array((int)$kw['id'], $filters['tags'], true)) {
-                $newTags = array_values(array_diff($filters['tags'], [(int)$kw['id']]));
-                $q['tags'] = $newTags ? implode(',', $newTags) : '';
-              } else {
-                $newTags = array_merge($filters['tags'], [(int)$kw['id']]);
-                $q['tags'] = implode(',', $newTags);
+          <div class="multi-select" id="tagMulti">
+            <button type="button" class="multi-select-toggle" id="tagToggle">
+              <span>
+                <?php if (empty($filters['tags'])): ?>
+                  전체
+                <?php else:
+                  $selectedNames = array_map(function ($id) use ($keywords) {
+                    foreach ($keywords as $k) { if ((int)$k['id'] === (int)$id) return $k['keyword']; }
+                    return '';
+                  }, $filters['tags']);
+                  $selectedNames = array_filter($selectedNames);
+                  ?>
+                  <?= htmlspecialchars(implode(', ', $selectedNames)) ?>
+                <?php endif; ?>
+              </span>
+              <span style="font-size:11px;color:var(--text-dim)">▼</span>
+            </button>
+            <div class="multi-select-menu" id="tagMenu">
+              <?php
+              $tagCountMap = [];
+              foreach ($tag_counts['keywords'] ?? [] as $kw) {
+                $tagCountMap[(int)$kw['id']] = (int)$kw['cnt'];
               }
-            ?>
-            <a href="?<?= http_build_query($q) ?>" class="tag-btn <?= in_array((int)$kw['id'], $filters['tags'], true) ? 'active' : '' ?>"><?= htmlspecialchars($kw['keyword']) ?></a>
-            <?php endforeach; ?>
+              ?>
+              <label class="multi-select-item">
+                <span>
+                  <input type="checkbox" value="__all" id="tagAll" <?= empty($filters['tags']) ? 'checked' : '' ?>> 전체
+                </span>
+                <span class="count"><?= (int)($tag_counts['total'] ?? 0) ?></span>
+              </label>
+              <?php foreach ($keywords as $kw):
+                $kid = (int)$kw['id'];
+                $cnt = $tagCountMap[$kid] ?? 0;
+                $name = $kw['keyword'];
+              ?>
+              <label class="multi-select-item">
+                <span>
+                  <input type="checkbox" class="tag-option" value="<?= $kid ?>" data-keyword="<?= htmlspecialchars($name) ?>" <?= in_array($kid, $filters['tags'], true) ? 'checked' : '' ?>>
+                  <?= htmlspecialchars($name) ?>
+                </span>
+                <span class="count"><?= $cnt ?></span>
+              </label>
+              <?php endforeach; ?>
+            </div>
           </div>
           <p style="font-size:11px;color:var(--text-dim);margin-top:6px">여러 태그 선택 시 해당 키워드 중 하나라도 포함된 공고가 표시됩니다.</p>
         </div>
@@ -490,6 +514,64 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     document.addEventListener('click', (e) => {
       if (!sourceMenu.contains(e.target) && !sourceToggle.contains(e.target)) {
         sourceMenu.style.display = 'none';
+      }
+    });
+  }
+
+  // 태그 멀티 선택 드롭다운 (사이트명과 동일 패턴)
+  const tagToggle = document.getElementById('tagToggle');
+  const tagMenu = document.getElementById('tagMenu');
+  const tagsInput = document.getElementById('tagsInput');
+  if (tagToggle && tagMenu && tagsInput) {
+    const tagAllCheckbox = document.getElementById('tagAll');
+    const tagOptionCheckboxes = Array.from(document.querySelectorAll('.tag-option'));
+
+    function updateTagHidden() {
+      const selected = tagOptionCheckboxes.filter(ch => ch.checked).map(ch => ch.value);
+      if (tagAllCheckbox) {
+        tagAllCheckbox.checked = selected.length === 0;
+      }
+      tagsInput.value = selected.join(',');
+      const labelSpan = tagToggle.querySelector('span');
+      if (labelSpan) {
+        if (selected.length === 0) {
+          labelSpan.textContent = '전체';
+        } else {
+          labelSpan.textContent = selected.map(id => {
+            const opt = tagOptionCheckboxes.find(ch => ch.value === id);
+            return opt ? (opt.getAttribute('data-keyword') || id) : id;
+          }).join(', ');
+        }
+      }
+    }
+
+    tagToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isOpen = tagMenu.style.display === 'block';
+      tagMenu.style.display = isOpen ? 'none' : 'block';
+    });
+
+    if (tagAllCheckbox) {
+      tagAllCheckbox.addEventListener('change', () => {
+        if (tagAllCheckbox.checked) {
+          tagOptionCheckboxes.forEach(ch => { ch.checked = false; });
+        }
+        updateTagHidden();
+      });
+    }
+
+    tagOptionCheckboxes.forEach(ch => {
+      ch.addEventListener('change', () => {
+        if (tagAllCheckbox && ch.checked) {
+          tagAllCheckbox.checked = false;
+        }
+        updateTagHidden();
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!tagMenu.contains(e.target) && !tagToggle.contains(e.target)) {
+        tagMenu.style.display = 'none';
       }
     });
   }

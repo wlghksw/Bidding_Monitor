@@ -174,6 +174,48 @@ class Database {
         return $out;
     }
 
+    /** 태그(키워드)별 건수 - 필터 패널 드롭다운용 (search, deadline, sources 반영, tags 제외) */
+    public function getTagCounts(array $filters = []): array {
+        $where = ['1=1'];
+        $params = [];
+        $search = trim($filters['search'] ?? '');
+        $deadline = trim($filters['deadline'] ?? '');
+        $sources = $filters['sources'] ?? [];
+        if (!is_array($sources)) {
+            $sources = $sources !== '' ? array_filter(array_map('trim', explode(',', (string)$sources))) : [];
+        }
+        if ($search) { $where[] = '(b.title LIKE :s OR b.org_name LIKE :s)'; $params[':s'] = "%{$search}%"; }
+        if ($deadline) { $where[] = 'b.deadline_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL :d DAY)'; $params[':d'] = (int)$deadline; }
+        if ($sources) {
+            $placeholders = [];
+            foreach ($sources as $i => $src) {
+                $key = ":src{$i}";
+                $placeholders[] = $key;
+                $params[$key] = $src;
+            }
+            $where[] = 'b.source IN (' . implode(',', $placeholders) . ')';
+        }
+        $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
+        $whereStr = implode(' AND ', $where);
+
+        $totalSql = "SELECT COUNT(*) FROM bids b WHERE {$whereStr}";
+        $stmt = $this->pdo->prepare($totalSql);
+        foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+        $stmt->execute();
+        $total = (int)$stmt->fetchColumn();
+
+        $sql = "SELECT k.id, k.keyword, COUNT(DISTINCT b.id) AS cnt FROM bids b
+                INNER JOIN bid_keywords bk ON bk.bid_id = b.id
+                INNER JOIN keywords k ON k.id = bk.keyword_id
+                WHERE {$whereStr}
+                GROUP BY k.id, k.keyword ORDER BY k.keyword";
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        return ['total' => $total, 'keywords' => $rows];
+    }
+
     // ── 키워드 자동완성/추천 ──
     public function getKeywordSuggestions(string $q, int $limit = 10): array {
         if (strlen($q) < 1) return $this->getKeywords();
