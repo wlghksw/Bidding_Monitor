@@ -75,6 +75,8 @@ class HttpClient
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_TIMEOUT       => $this->timeout,
+                CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout),
+                CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_USERAGENT     => 'BiddingMonitor/1.0 (Compatible; PHP)',
                 CURLOPT_ENCODING      => '',
             ]);
@@ -89,9 +91,10 @@ class HttpClient
         } while ($running > 0);
 
         foreach ($handles as $url => $ch) {
-            $body = curl_exec($ch);
+            $body = curl_multi_getcontent($ch);
+            $errno = curl_errno($ch);
             $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            if (is_string($body) && $code >= 200 && $code < 400) {
+            if ($errno === 0 && is_string($body) && $code >= 200 && $code < 400) {
                 $result[$url] = $body;
             }
             curl_multi_remove_handle($mh, $ch);
@@ -101,17 +104,5 @@ class HttpClient
         }
         curl_multi_close($mh);
         return $result;
-    }
-
-    public function setMaxRetries(int $n): self
-    {
-        $this->maxRetries = $n;
-        return $this;
-    }
-
-    public function setRateLimitDelay(float $seconds): self
-    {
-        $this->rateLimitDelay = $seconds;
-        return $this;
     }
 }

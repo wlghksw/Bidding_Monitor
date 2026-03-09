@@ -89,7 +89,20 @@ class Database {
         }
 
         // 기본: 마감일이 지나지 않은 공고만 노출 (당일 포함)
-        $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
+        // 단, 특정 소스(예: 강화군/수출바우처)는 과거 공고도 확인할 수 있게 예외 처리
+        $showExpiredByDefaultSources = ['강화군 고시공고', '수출바우처'];
+        $includeExpired = false;
+        if ($sources) {
+            foreach ($sources as $src) {
+                if (in_array($src, $showExpiredByDefaultSources, true)) {
+                    $includeExpired = true;
+                    break;
+                }
+            }
+        }
+        if (!$includeExpired) {
+            $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
+        }
 
         $orderBy = match($sort) {
             'deadline' => 'b.deadline_date ASC',
@@ -160,6 +173,25 @@ class Database {
             $where[] = '(' . $tagWhere . ')';
         }
 
+        // 기본: 마감일이 지나지 않은 공고만 노출 (getBids와 일치)
+        $showExpiredByDefaultSources = ['강화군 고시공고', '수출바우처'];
+        $sources = $filters['sources'] ?? [];
+        if (!is_array($sources)) {
+            $sources = $sources !== '' ? array_filter(array_map('trim', explode(',', (string)$sources))) : [];
+        }
+        $includeExpired = false;
+        if ($sources) {
+            foreach ($sources as $src) {
+                if (in_array($src, $showExpiredByDefaultSources, true)) {
+                    $includeExpired = true;
+                    break;
+                }
+            }
+        }
+        if (!$includeExpired) {
+            $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
+        }
+
         $whereStr = implode(' AND ', $where);
         $sql = "SELECT b.source, COUNT(*) AS cnt FROM bids b WHERE {$whereStr} GROUP BY b.source";
         $stmt = $this->pdo->prepare($sql);
@@ -195,7 +227,20 @@ class Database {
             }
             $where[] = 'b.source IN (' . implode(',', $placeholders) . ')';
         }
-        $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
+        // 기본: 마감일이 지나지 않은 공고만 노출 (getBids와 일치)
+        $showExpiredByDefaultSources = ['강화군 고시공고', '수출바우처'];
+        $includeExpired = false;
+        if ($sources) {
+            foreach ($sources as $src) {
+                if (in_array($src, $showExpiredByDefaultSources, true)) {
+                    $includeExpired = true;
+                    break;
+                }
+            }
+        }
+        if (!$includeExpired) {
+            $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
+        }
         $whereStr = implode(' AND ', $where);
 
         $totalSql = "SELECT COUNT(*) FROM bids b WHERE {$whereStr}";

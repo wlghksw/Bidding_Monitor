@@ -137,10 +137,6 @@ class YdpGuCrawler implements NoticeCrawler
             }
         }
 
-        if (php_sapi_name() === 'cli') {
-            echo "[영등포구청] 최종 Notice " . count($notices) . "건 생성\n";
-        }
-
         return $notices;
     }
 }

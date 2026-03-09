@@ -13,6 +13,8 @@ use \Database;
 class Runner
 {
     private string $logPath;
+    /** 마감 지난 공고도 저장할 소스 */
+    private const SAVE_EXPIRED_SOURCES = ['강화군 고시공고', '수출바우처'];
 
     public function __construct(
         private Database $db,
@@ -119,20 +121,20 @@ class Runner
     {
         $keywords = $db->getKeywords();
         $notices = $crawler->crawl();
-        $count = 0;
+        $saved = 0;
         foreach ($notices as $notice) {
-            if ($notice->isExpired()) {
+            if ($notice->isExpired() && !in_array($crawler->getSourceName(), self::SAVE_EXPIRED_SOURCES, true)) {
                 continue;
             }
             $params = $notice->toBidParams();
             $bidId = $db->saveBid($params);
+            $saved++;
             $matched = self::matchKeywordsStatic($notice->title, $keywords);
             if ($matched !== []) {
                 $db->saveBidKeywords($bidId, $matched);
-                $count++;
             }
         }
-        return $count;
+        return $saved;
     }
 
     private static function matchKeywordsStatic(string $title, array $keywords): array
@@ -144,12 +146,6 @@ class Runner
             }
         }
         return $matched;
-    }
-
-    /** 키워드 매칭 (제목에 키워드 포함 시 keyword id 목록) */
-    private function matchKeywords(string $title, array $keywords): array
-    {
-        return self::matchKeywordsStatic($title, $keywords);
     }
 
     private function log(string $message): void
