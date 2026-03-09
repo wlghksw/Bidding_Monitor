@@ -28,6 +28,7 @@ use BiddingMonitor\Crawler\SiheungGosiCrawler;
 use BiddingMonitor\Crawler\PocheonEminwonCrawler;
 use BiddingMonitor\Crawler\GimpoGosiCrawler;
 use BiddingMonitor\Crawler\PyeongtaekGosiCrawler;
+use BiddingMonitor\Crawler\NyjGosiCrawler;
 use BiddingMonitor\Crawler\PajuGosiCrawler;
 use BiddingMonitor\Crawler\OsanGosiCrawler;
 use BiddingMonitor\Crawler\YonginGosiCrawler;
@@ -60,6 +61,7 @@ $crawlers = [
     new PocheonEminwonCrawler($http, $parser),
     new GimpoGosiCrawler($http, $parser),
     new PyeongtaekGosiCrawler($http, $parser),
+    new NyjGosiCrawler($http, $parser),
     new PajuGosiCrawler($http, $parser),
     new OsanGosiCrawler($http, $parser),
     new YonginGosiCrawler($http, $parser),
