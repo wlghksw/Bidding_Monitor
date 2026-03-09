@@ -22,6 +22,15 @@ use BiddingMonitor\Crawler\GanghwaCityCrawler;
 use BiddingMonitor\Crawler\ExportVoucherCrawler;
 use BiddingMonitor\Crawler\KosacCrawler;
 use BiddingMonitor\Crawler\HsCityGosiCrawler;
+use BiddingMonitor\Crawler\Ui4uGosiCrawler;
+use BiddingMonitor\Crawler\GjCityGosiCrawler;
+use BiddingMonitor\Crawler\SiheungGosiCrawler;
+use BiddingMonitor\Crawler\PocheonEminwonCrawler;
+use BiddingMonitor\Crawler\GimpoGosiCrawler;
+use BiddingMonitor\Crawler\PyeongtaekGosiCrawler;
+use BiddingMonitor\Crawler\PajuGosiCrawler;
+use BiddingMonitor\Crawler\OsanGosiCrawler;
+use BiddingMonitor\Crawler\YonginGosiCrawler;
 
 $isCli    = php_sapi_name() === 'cli';
 $isManual = isset($_GET['manual']);
@@ -38,13 +47,22 @@ $parser = new HtmlParser();
 $crawlers = [
     new NaraJangteoCrawler($http, $db->getLastFetchedAt('나라장터')),
     new KStartupCrawler($http),
-    new Smes24Crawler($http),
+    new Smes24Crawler($http, $db->getLastFetchedAt('중소벤처24')),
     new BizInfoCrawler($http),
     new KosacCrawler($http, $parser),
     new ExportVoucherCrawler($http, $parser),
     new YdpGuCrawler($http, $parser),
     new GanghwaCityCrawler($http, $parser),
     new HsCityGosiCrawler($http, $parser),
+    new Ui4uGosiCrawler($http, $parser),
+    new GjCityGosiCrawler($http, $parser),
+    new SiheungGosiCrawler($http, $parser),
+    new PocheonEminwonCrawler($http, $parser),
+    new GimpoGosiCrawler($http, $parser),
+    new PyeongtaekGosiCrawler($http, $parser),
+    new PajuGosiCrawler($http, $parser),
+    new OsanGosiCrawler($http, $parser),
+    new YonginGosiCrawler($http, $parser),
 ];
 
 $runner  = new Runner($db, $http, $parser);
@@ -66,19 +84,25 @@ try {
     // 긴 DELETE는 커넥션이 끊길 수 있어 청크로 삭제
     $cleanupDb = new Database();
     $pdo = $cleanupDb->getPdo();
+    // 마감 지난 공고도 보관하는 소스는 자동 삭제에서 제외 (재수집/삭제 반복 방지)
+    $cleanupExcludeSources = ['강화군 고시공고', '수출바우처', '파주시 고시공고'];
+    $excludeSql = implode(',', array_map([$pdo, 'quote'], $cleanupExcludeSources));
     $deletedTotal = 0;
     $chunk = 3000;
     for ($i = 0; $i < 50; $i++) {
         $sql = "
             DELETE FROM bids
-            WHERE (
-                deadline_date IS NOT NULL
-                AND deadline_date <> '1970-01-01'
-                AND deadline_date < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
-            ) OR (
-                (deadline_date IS NULL OR deadline_date = '1970-01-01')
-                AND created_at < DATE_SUB(NOW(), INTERVAL 1 YEAR)
-            )
+            WHERE source NOT IN ({$excludeSql})
+              AND (
+                (
+                    deadline_date IS NOT NULL
+                    AND deadline_date <> '1970-01-01'
+                    AND deadline_date < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
+                ) OR (
+                    (deadline_date IS NULL OR deadline_date = '1970-01-01')
+                    AND created_at < DATE_SUB(NOW(), INTERVAL 1 YEAR)
+                )
+              )
             LIMIT {$chunk}
         ";
         $deleted = $pdo->exec($sql);

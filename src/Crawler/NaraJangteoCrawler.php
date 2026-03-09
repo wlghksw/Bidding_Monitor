@@ -6,6 +6,7 @@ namespace BiddingMonitor\Crawler;
 use BiddingMonitor\Core\HttpClient;
 use BiddingMonitor\Core\Notice;
 use BiddingMonitor\Core\NoticeCrawler;
+use \Database;
 
 /**
  * 나라장터(G2B) API 기반 크롤러
@@ -16,6 +17,13 @@ class NaraJangteoCrawler implements NoticeCrawler
         private HttpClient $http,
         private ?string $lastFetchedAt = null,
     ) {}
+
+    private ?Database $db = null;
+
+    public function setDatabase(Database $db): void
+    {
+        $this->db = $db;
+    }
 
     public function getSourceName(): string
     {
@@ -59,13 +67,14 @@ class NaraJangteoCrawler implements NoticeCrawler
             $items = $body['items']['item'] ?? $body['items'] ?? [];
             if (empty($items)) break;
             if (isset($items['bidNtceNo'])) $items = [$items];
+            $pageMap = []; // url => Notice
             foreach ($items as $item) {
                 $title = $item['bidNtceNm'] ?? '';
                 $url = $item['bidNtceUrl'] ?? 'https://www.g2b.go.kr';
                 $org = $item['ntceInsttNm'] ?? '';
                 $budget = (float)($item['presmptPrce'] ?? 0);
                 $deadline = $item['bidClseDt'] ?? '';
-                $notices[] = new Notice(
+                $pageMap[$url] = new Notice(
                     title: $title,
                     url: $url,
                     source: $this->getSourceName(),
@@ -74,6 +83,27 @@ class NaraJangteoCrawler implements NoticeCrawler
                     budget: $budget > 0 ? number_format($budget) . '원' : '-',
                     budgetRaw: $budget,
                 );
+            }
+
+            // DB가 있으면 "이미 있는 URL"은 스킵하고, 페이지가 전부 기존이면 여기서 종료
+            if ($this->db !== null && $pageMap !== []) {
+                $info = $this->db->getExistingBidInfoByUrls($this->getSourceName(), array_keys($pageMap));
+                $pageFullyKnown = true;
+                foreach ($pageMap as $u => $notice) {
+                    if (isset($info[$u])) {
+                        continue;
+                    }
+                    $pageFullyKnown = false;
+                    $notices[] = $notice;
+                }
+                if ($pageFullyKnown) {
+                    break;
+                }
+                continue;
+            }
+
+            foreach ($pageMap as $notice) {
+                $notices[] = $notice;
             }
         }
         return $notices;

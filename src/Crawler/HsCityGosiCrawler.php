@@ -7,6 +7,7 @@ use BiddingMonitor\Core\HttpClient;
 use BiddingMonitor\Core\HtmlParser;
 use BiddingMonitor\Core\Notice;
 use BiddingMonitor\Core\NoticeCrawler;
+use \Database;
 
 /**
  * 화성시 고시공고 크롤러
@@ -28,10 +29,17 @@ class HsCityGosiCrawler implements NoticeCrawler
     private const TARGET_YEAR = 2026;
     private const MAX_PAGES = 50;
 
+    private ?Database $db = null;
+
     public function __construct(
         private HttpClient $http,
         private HtmlParser $parser,
     ) {}
+
+    public function setDatabase(Database $db): void
+    {
+        $this->db = $db;
+    }
 
     public function getSourceName(): string
     {
@@ -67,6 +75,7 @@ class HsCityGosiCrawler implements NoticeCrawler
             }
 
             $hasTargetYearOnPage = false;
+            $pageMap = []; // url => Notice
 
             foreach ($rows as $row) {
                 $tds = $xpath->query('./td', $row);
@@ -117,7 +126,7 @@ class HsCityGosiCrawler implements NoticeCrawler
                     $deadlineDate = $pm[2];
                 }
 
-                $notices[] = new Notice(
+                $pageMap[$detailUrl] = new Notice(
                     title:        $title,
                     url:          $detailUrl,
                     source:       self::SOURCE,
@@ -130,6 +139,27 @@ class HsCityGosiCrawler implements NoticeCrawler
 
             if (!$hasTargetYearOnPage) {
                 break;
+            }
+
+            // DB가 있으면 "이 페이지 전부 이미 처리됨"이면 여기서 종료 (URL 기반, 존재만으로 스킵)
+            if ($this->db !== null && $pageMap !== []) {
+                $info = $this->db->getExistingBidInfoByUrls($this->getSourceName(), array_keys($pageMap));
+                $pageFullyKnown = true;
+                foreach ($pageMap as $u => $notice) {
+                    if (isset($info[$u])) {
+                        continue;
+                    }
+                    $pageFullyKnown = false;
+                    $notices[] = $notice;
+                }
+                if ($pageFullyKnown) {
+                    break;
+                }
+                continue;
+            }
+
+            foreach ($pageMap as $notice) {
+                $notices[] = $notice;
             }
         }
 

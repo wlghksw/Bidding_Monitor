@@ -88,22 +88,6 @@ class Database {
             $params[':date_to'] = $to;
         }
 
-        // 기본: 마감일이 지나지 않은 공고만 노출 (당일 포함)
-        // 단, 특정 소스(예: 강화군/수출바우처)는 과거 공고도 확인할 수 있게 예외 처리
-        $showExpiredByDefaultSources = ['강화군 고시공고', '수출바우처'];
-        $includeExpired = false;
-        if ($sources) {
-            foreach ($sources as $src) {
-                if (in_array($src, $showExpiredByDefaultSources, true)) {
-                    $includeExpired = true;
-                    break;
-                }
-            }
-        }
-        if (!$includeExpired) {
-            $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
-        }
-
         $orderBy = match($sort) {
             'deadline' => 'b.deadline_date ASC',
             'amount'   => 'b.budget_raw DESC',
@@ -173,25 +157,6 @@ class Database {
             $where[] = '(' . $tagWhere . ')';
         }
 
-        // 기본: 마감일이 지나지 않은 공고만 노출 (getBids와 일치)
-        $showExpiredByDefaultSources = ['강화군 고시공고', '수출바우처'];
-        $sources = $filters['sources'] ?? [];
-        if (!is_array($sources)) {
-            $sources = $sources !== '' ? array_filter(array_map('trim', explode(',', (string)$sources))) : [];
-        }
-        $includeExpired = false;
-        if ($sources) {
-            foreach ($sources as $src) {
-                if (in_array($src, $showExpiredByDefaultSources, true)) {
-                    $includeExpired = true;
-                    break;
-                }
-            }
-        }
-        if (!$includeExpired) {
-            $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
-        }
-
         $whereStr = implode(' AND ', $where);
         $sql = "SELECT b.source, COUNT(*) AS cnt FROM bids b WHERE {$whereStr} GROUP BY b.source";
         $stmt = $this->pdo->prepare($sql);
@@ -226,20 +191,6 @@ class Database {
                 $params[$key] = $src;
             }
             $where[] = 'b.source IN (' . implode(',', $placeholders) . ')';
-        }
-        // 기본: 마감일이 지나지 않은 공고만 노출 (getBids와 일치)
-        $showExpiredByDefaultSources = ['강화군 고시공고', '수출바우처'];
-        $includeExpired = false;
-        if ($sources) {
-            foreach ($sources as $src) {
-                if (in_array($src, $showExpiredByDefaultSources, true)) {
-                    $includeExpired = true;
-                    break;
-                }
-            }
-        }
-        if (!$includeExpired) {
-            $where[] = '(b.deadline_date IS NULL OR b.deadline_date >= CURDATE())';
         }
         $whereStr = implode(' AND ', $where);
 
@@ -344,6 +295,66 @@ class Database {
             }
             throw $e;
         }
+    }
+
+    /**
+     * 소스 + 제목 목록으로 기존 공고 정보 조회 (증분/재크롤 스킵용)
+     * @param string[] $titles
+     * @return array<string, array{deadline_date:?string,fetched_at:?string}> title => info
+     */
+    public function getExistingBidInfoByTitles(string $source, array $titles): array
+    {
+        $titles = array_values(array_filter(array_map('strval', $titles), fn ($t) => $t !== ''));
+        if (!$titles) return [];
+
+        $out = [];
+        $chunk = 200;
+        for ($i = 0; $i < count($titles); $i += $chunk) {
+            $slice = array_slice($titles, $i, $chunk);
+            $placeholders = implode(',', array_fill(0, count($slice), '?'));
+            $sql = "SELECT title, deadline_date, fetched_at FROM bids WHERE source = ? AND title IN ($placeholders)";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute(array_merge([$source], $slice));
+            foreach ($stmt->fetchAll() as $r) {
+                $t = (string)($r['title'] ?? '');
+                if ($t === '') continue;
+                $out[$t] = [
+                    'deadline_date' => $r['deadline_date'] ?? null,
+                    'fetched_at'    => $r['fetched_at'] ?? null,
+                ];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * 소스 + URL 목록으로 기존 공고 정보 조회 (증분/재크롤 스킵용)
+     * @param string[] $urls
+     * @return array<string, array{deadline_date:?string,fetched_at:?string}> url => info
+     */
+    public function getExistingBidInfoByUrls(string $source, array $urls): array
+    {
+        $urls = array_values(array_filter(array_map('strval', $urls), fn ($u) => $u !== ''));
+        if (!$urls) return [];
+
+        $out = [];
+        $chunk = 200;
+        for ($i = 0; $i < count($urls); $i += $chunk) {
+            $slice = array_slice($urls, $i, $chunk);
+            $placeholders = implode(',', array_fill(0, count($slice), '?'));
+            $sql = "SELECT url, deadline_date, fetched_at FROM bids WHERE source = ? AND url IN ($placeholders)";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute(array_merge([$source], $slice));
+            foreach ($stmt->fetchAll() as $r) {
+                $u = (string)($r['url'] ?? '');
+                if ($u === '') continue;
+                $out[$u] = [
+                    'deadline_date' => $r['deadline_date'] ?? null,
+                    'fetched_at'    => $r['fetched_at'] ?? null,
+                ];
+            }
+        }
+        return $out;
     }
 
     // ── 키워드 매칭 저장 ──

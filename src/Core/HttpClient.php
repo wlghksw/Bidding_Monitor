@@ -12,10 +12,22 @@ class HttpClient
     private int $maxRetries = 2;
     private int $timeout = 30;
     private float $rateLimitDelay = 0.2; // 초
+    /** SSL 체인이 불완전한 일부 공공 사이트 예외 */
+    private const INSECURE_SSL_HOSTS = ['www.ui4u.go.kr'];
 
+    private function shouldVerifySsl(string $url): bool
+    {
+        $host = (string)(parse_url($url, PHP_URL_HOST) ?? '');
+        return !in_array($host, self::INSECURE_SSL_HOSTS, true);
+    }
+
+    /**
+     * 단일 GET 요청
+     */
     public function get(string $url): ?string
     {
         $attempt = 0;
+        $verifySsl = $this->shouldVerifySsl($url);
         while ($attempt <= $this->maxRetries) {
             $ch = curl_init($url);
             if ($ch === false) {
@@ -25,9 +37,58 @@ class HttpClient
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_TIMEOUT       => $this->timeout,
-                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYPEER => $verifySsl,
+                CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
                 CURLOPT_USERAGENT      => 'BiddingMonitor/1.0 (Compatible; PHP)',
                 CURLOPT_ENCODING       => '',
+            ]);
+            $response = curl_exec($ch);
+            $errno = curl_errno($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+            if ($errno === 0 && $httpCode >= 200 && $httpCode < 400 && is_string($response)) {
+                if (PHP_VERSION_ID < 80500) {
+                    curl_close($ch);
+                }
+                return $response;
+            }
+            if (PHP_VERSION_ID < 80500) {
+                curl_close($ch);
+            }
+            $attempt++;
+            if ($attempt <= $this->maxRetries) {
+                usleep((int)($this->rateLimitDelay * 1_000_000));
+            }
+        }
+        return null;
+    }
+
+    /**
+     * application/x-www-form-urlencoded POST 요청 (단일)
+     *
+     * @param array<string, scalar> $fields
+     */
+    public function postForm(string $url, array $fields): ?string
+    {
+        $attempt = 0;
+        $verifySsl = $this->shouldVerifySsl($url);
+        $body = http_build_query($fields, '', '&');
+
+        while ($attempt <= $this->maxRetries) {
+            $ch = curl_init($url);
+            if ($ch === false) {
+                return null;
+            }
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT        => $this->timeout,
+                CURLOPT_SSL_VERIFYPEER => $verifySsl,
+                CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
+                CURLOPT_USERAGENT      => 'BiddingMonitor/1.0 (Compatible; PHP)',
+                CURLOPT_ENCODING       => '',
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $body,
             ]);
             $response = curl_exec($ch);
             $errno = curl_errno($ch);
@@ -69,6 +130,7 @@ class HttpClient
 
         $handles = [];
         foreach ($urls as $url) {
+            $verifySsl = $this->shouldVerifySsl($url);
             $ch = curl_init($url);
             if ($ch === false) continue;
             curl_setopt_array($ch, [
@@ -76,7 +138,8 @@ class HttpClient
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_TIMEOUT       => $this->timeout,
                 CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout),
-                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYPEER => $verifySsl,
+                CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
                 CURLOPT_USERAGENT     => 'BiddingMonitor/1.0 (Compatible; PHP)',
                 CURLOPT_ENCODING      => '',
             ]);

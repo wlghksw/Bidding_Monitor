@@ -7,6 +7,7 @@ use BiddingMonitor\Core\HttpClient;
 use BiddingMonitor\Core\HtmlParser;
 use BiddingMonitor\Core\Notice;
 use BiddingMonitor\Core\NoticeCrawler;
+use \Database;
 
 /**
  * 강화군 고시공고 크롤러
@@ -33,11 +34,20 @@ class GanghwaCityCrawler implements NoticeCrawler
 
     // 상세페이지 병렬 요청 청크 크기
     private const CHUNK_SIZE  = 10;
+    private const RECENT_SKIP_DAYS = 7;
+    private const CHUNK_DELAY_US = 100_000;
+
+    private ?Database $db = null;
 
     public function __construct(
         private HttpClient $http,
         private HtmlParser $parser,
     ) {}
+
+    public function setDatabase(Database $db): void
+    {
+        $this->db = $db;
+    }
 
     public function getSourceName(): string
     {
@@ -58,6 +68,7 @@ class GanghwaCityCrawler implements NoticeCrawler
         // FIX: array_chunk를 linkMap 자체에 적용 → intersect_key 불필요
         $chunks  = array_chunk($linkMap, self::CHUNK_SIZE, true);
 
+        $chunkCount = count($chunks);
         foreach ($chunks as $chunkMap) {
             $responses = $this->http->getMulti(array_keys($chunkMap));
 
@@ -84,7 +95,9 @@ class GanghwaCityCrawler implements NoticeCrawler
             }
 
             // 청크 사이 딜레이 (서버 부하 방지)
-            usleep(500_000); // 0.5초
+            if ($chunkCount > 1) {
+                usleep(self::CHUNK_DELAY_US);
+            }
         }
 
         return $notices;
@@ -97,6 +110,7 @@ class GanghwaCityCrawler implements NoticeCrawler
     {
         $linkMap = [];
         $symd    = self::START_DATE;
+        $cutoff = $this->db !== null ? new \DateTime('-' . self::RECENT_SKIP_DAYS . ' days') : null;
 
         for ($page = 1; $page <= self::MAX_PAGES; $page++) {
             // FIX: announce_div의 쉼표가 http_build_query에서 %2C로 인코딩되는 문제 방지
@@ -129,6 +143,7 @@ class GanghwaCityCrawler implements NoticeCrawler
             }
 
             $hasTargetYearOnPage = false;
+            $pageMap = [];
 
             foreach ($rows as $row) {
                 $tds = $xpath->query('.//td', $row);
@@ -179,7 +194,7 @@ class GanghwaCityCrawler implements NoticeCrawler
                 // 담당부서 (4번째 td)
                 $dept = HtmlParser::getTextContent($tds->item(3));
 
-                $linkMap[$href] = [
+                $pageMap[$href] = [
                     'title'   => $title,
                     'dept'    => $dept,
                     'regDate' => $regDateStr,
@@ -188,6 +203,45 @@ class GanghwaCityCrawler implements NoticeCrawler
 
             if (!$hasTargetYearOnPage) {
                 break;
+            }
+
+            // DB가 있으면 "이 페이지 전부 이미 처리됨"이면 여기서 종료 (URL 기반)
+            if ($this->db !== null && $pageMap !== []) {
+                $info = $this->db->getExistingBidInfoByUrls($this->getSourceName(), array_keys($pageMap));
+                $pageFullyKnown = true;
+                foreach ($pageMap as $href => $meta) {
+                    $row = $info[$href] ?? null;
+                    if (!is_array($row)) {
+                        $pageFullyKnown = false;
+                        $linkMap[$href] = $meta;
+                        continue;
+                    }
+
+                    $dl = $row['deadline_date'] ?? null;
+                    if ($dl !== null && $dl !== '' && $dl !== '1970-01-01') {
+                        continue;
+                    }
+                    $fetchedAt = $row['fetched_at'] ?? null;
+                    if ($cutoff !== null && is_string($fetchedAt) && $fetchedAt !== '') {
+                        try {
+                            if (new \DateTime($fetchedAt) >= $cutoff) {
+                                continue;
+                            }
+                        } catch (\Exception) {}
+                    }
+
+                    // 마감일이 비어있고 최근 재시도도 아님 → 상세 필요
+                    $pageFullyKnown = false;
+                    $linkMap[$href] = $meta;
+                }
+
+                if ($pageFullyKnown) {
+                    break;
+                }
+            } else {
+                foreach ($pageMap as $href => $meta) {
+                    $linkMap[$href] = $meta;
+                }
             }
 
             $nextLink = $xpath->query("//a[contains(@href,'pgno=" . ($page + 1) . "')]");

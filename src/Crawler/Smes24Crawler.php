@@ -6,6 +6,7 @@ namespace BiddingMonitor\Crawler;
 use BiddingMonitor\Core\HttpClient;
 use BiddingMonitor\Core\Notice;
 use BiddingMonitor\Core\NoticeCrawler;
+use \Database;
 
 /**
  * 중소벤처24 공고정보 API 크롤러
@@ -14,7 +15,15 @@ class Smes24Crawler implements NoticeCrawler
 {
     public function __construct(
         private HttpClient $http,
+        private ?string $lastFetchedAt = null,
     ) {}
+
+    private ?Database $db = null;
+
+    public function setDatabase(Database $db): void
+    {
+        $this->db = $db;
+    }
 
     public function getSourceName(): string
     {
@@ -25,7 +34,9 @@ class Smes24Crawler implements NoticeCrawler
     {
         $days = defined('SMES24_DAYS') ? SMES24_DAYS : 30;
         $endDt = date('Ymd');
-        $strDt = date('Ymd', strtotime("-{$days} day"));
+        $strDt = $this->lastFetchedAt
+            ? date('Ymd', strtotime($this->lastFetchedAt . ' -1 day'))
+            : date('Ymd', strtotime("-{$days} day"));
         $url = SMES24_API_URL . '?token=' . SMES24_API_KEY . '&strDt=' . $strDt . '&endDt=' . $endDt;
         $response = $this->http->get($url);
         if ($response === null) {
@@ -39,6 +50,7 @@ class Smes24Crawler implements NoticeCrawler
         $items = $data['data'] ?? [];
         if (isset($items['pblancNm'])) $items = [$items];
         $notices = [];
+        $pageMap = []; // url => Notice
         foreach ($items as $item) {
             $title = $item['pblancNm'] ?? '';
             if ($title === '') continue;
@@ -46,7 +58,7 @@ class Smes24Crawler implements NoticeCrawler
             $org = $item['sportInsttNm'] ?? '';
             $endDate = $item['pblancEndDt'] ?? '';
             $deadline = strlen($endDate) >= 10 ? substr($endDate, 0, 10) : null;
-            $notices[] = new Notice(
+            $pageMap[$url] = new Notice(
                 title: $title,
                 url: $url,
                 source: $this->getSourceName(),
@@ -55,6 +67,19 @@ class Smes24Crawler implements NoticeCrawler
                 budget: '-',
                 budgetRaw: 0,
             );
+        }
+        if ($this->db !== null && $pageMap !== []) {
+            $info = $this->db->getExistingBidInfoByUrls($this->getSourceName(), array_keys($pageMap));
+            foreach ($pageMap as $u => $notice) {
+                if (isset($info[$u])) {
+                    continue;
+                }
+                $notices[] = $notice;
+            }
+            return $notices;
+        }
+        foreach ($pageMap as $notice) {
+            $notices[] = $notice;
         }
         return $notices;
     }

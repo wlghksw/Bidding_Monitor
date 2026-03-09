@@ -7,6 +7,7 @@ use BiddingMonitor\Core\HttpClient;
 use BiddingMonitor\Core\HtmlParser;
 use BiddingMonitor\Core\Notice;
 use BiddingMonitor\Core\NoticeCrawler;
+use \Database;
 
 /**
  * 수출바우처(수출지원기반활용사업) 공지사항 크롤러
@@ -23,10 +24,17 @@ class ExportVoucherCrawler implements NoticeCrawler
     // 최대 페이지 안전장치
     private const MAX_PAGES = 30;
 
+    private ?Database $db = null;
+
     public function __construct(
         private HttpClient $http,
         private HtmlParser $parser,
     ) {}
+
+    public function setDatabase(Database $db): void
+    {
+        $this->db = $db;
+    }
 
     public function getSourceName(): string
     {
@@ -62,6 +70,8 @@ class ExportVoucherCrawler implements NoticeCrawler
                 break;
             }
 
+            $pageMap = []; // title => Notice
+
             foreach ($rows as $row) {
                 $tds = $xpath->query('./td', $row);
                 if ($tds === false || $tds->length < 4) {
@@ -72,6 +82,10 @@ class ExportVoucherCrawler implements NoticeCrawler
                 $pinImg   = $xpath->query('.//img', $tds->item(0));
                 if ($pinImg !== false && $pinImg->length > 0) {
                     $isPinned = true;
+                }
+                if ($isPinned) {
+                    // 고정 공지는 반복 노출/정리 로직과 충돌해 매번 재수집되는 경우가 있어 제외
+                    continue;
                 }
 
                 // 제목/링크는 2번째 td
@@ -128,7 +142,7 @@ class ExportVoucherCrawler implements NoticeCrawler
                     }
                 }
 
-                $notices[] = new Notice(
+                $pageMap[$title] = new Notice(
                     title:        $title,
                     url:          $href,
                     source:       $this->getSourceName(),
@@ -139,7 +153,29 @@ class ExportVoucherCrawler implements NoticeCrawler
                 );
             }
 
-            // 다음 페이지로 계속 진행 (MAX_PAGES까지)
+            // DB가 있으면 "이 페이지 전부 이미 처리됨"이면 여기서 종료 (title 기반 - DB 유니크키가 title일 수 있어 URL보다 안전)
+            if ($this->db !== null && $pageMap !== []) {
+                $info = $this->db->getExistingBidInfoByTitles($this->getSourceName(), array_keys($pageMap));
+                $pageFullyKnown = true;
+                foreach ($pageMap as $title => $notice) {
+                    if (isset($info[$title])) {
+                        continue;
+                    }
+                    $pageFullyKnown = false;
+                    $notices[] = $notice;
+                }
+
+                if ($pageFullyKnown) {
+                    break;
+                }
+
+                continue;
+            }
+
+            // DB가 없으면 해당 페이지 공고 전부 저장
+            foreach ($pageMap as $notice) {
+                $notices[] = $notice;
+            }
         }
 
         return $notices;
